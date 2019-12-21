@@ -50,6 +50,7 @@ averageFuelPerLap = 0.0
 fuelLastLap = 0.0
 completedLaps = 0.0
 fuelAtLapStart = 0.0
+fuelRemaining = 0.0
 distanceTraveledAtStart = 0.0
 fuelAtStart = 0.0
 lastFuelMeasurement = 0.0
@@ -237,8 +238,8 @@ def onMainAppDismissedListener(*args):
 
     debug("Main app is inactive")
 
-def onMainAppFormRender(delta):
-    global formTimer, waitingForSessionType, previousSessionType, waitTimeSessionType, timerSessionType
+def onMainAppFormRender(deltaT):
+    global formTimer, waitingForSessionType, previousSessionType, waitTimeSessionType, timerSessionType, completedLaps
 
     formTimer += deltaT
     if formTimer < 0.200:
@@ -246,14 +247,9 @@ def onMainAppFormRender(delta):
 
     formTimer = 0
 
-    session = sm.graphics.session
-    if previousSessionType != session:
-        previousSessionType = session
-        debug("Session type changed to " + session)
-
 def acUpdate(deltaT):
     global mainAppIsActive, timer
-    global averageFuelPerLap, fuelLastLap, completedLaps, fuelAtLapStart, distanceTraveledAtStart, fuelAtStart, lastFuelMeasurement, lastDistanceTraveled, fuelLapsCounted, fuelUsedForCountedLaps, percentOfBestLapTime, bestLapTime
+    global averageFuelPerLap, fuelLastLap, completedLaps, fuelAtLapStart, distanceTraveledAtStart, fuelAtStart, lastFuelMeasurement, lastDistanceTraveled, fuelLapsCounted, fuelUsedForCountedLaps, percentOfBestLapTime, bestLapTime, previousSessionType, fuelRemaining
 
     timer += deltaT
     if timer < 0.025:
@@ -270,12 +266,18 @@ def acUpdate(deltaT):
         inPitLane = ac.isCarInPitline(0)
         maxFuel = sm.static.maxFuel
         normalizedSplinePosition = round(sm.graphics.normalizedCarPosition, 4)
+        session = sm.graphics.session
+        if previousSessionType != session or remaining > fuelRemaining:
+            previousSessionType = session
+            completedLaps = 0
+            debug("Session type changed to " + str(session))
 
-        if completedLaps >= 1 and bestLapTime == -1 or sm.graphics.iBestTime < bestLapTime:
+        if currentLap >= 1 and bestLapTime == -1 or (sm.graphics.iBestTime != 0 and sm.graphics.iBestTime < bestLapTime):
             bestLapTime = sm.graphics.iBestTime
             debug("New best lap time posted : " + str(bestLapTime))
 
         lastLapTime = sm.graphics.iLastTime
+        fuelRemaining = remaining
 
         if currentLap != completedLaps: #when crossed finish line
             debug("Current Lap %d, fuelAtLapStart = %.1f, remaining = %.1f" % (currentLap, fuelAtLapStart, remaining))
