@@ -26,10 +26,13 @@ appName = "CBV_FuelCalc"
 mainApp = 0
 mainAppIsActive = False
 x_app_size = 300
-y_app_size = 240
+y_app_size = 280
+x_app_min_size = 300
+y_app_min_size = 50
 defaultFontSize = 14
 customFontName = "Digital-7 Mono"
 backgroundOpacity = 0
+minimised = True
 
 # app related
 
@@ -43,6 +46,10 @@ raceTotalLapsText = 0
 raceTotalLapsValue = 0
 bestLapTimeText = 0
 bestLapTimeValue = 0
+raceTypeValue = 0
+averageFuelPerLapText = 0
+extraLitersText = 0
+timedRaceText = 0
 
 # fuel
 
@@ -136,20 +143,26 @@ def getSettings():
 def createUI():
     global x_app_size, y_app_size, defaultFontSize
     global isTimedRace, timedRaceCheckbox, averageFuelPerLapValue, raceFuelNeededValue, raceTotalLapsText, raceTotalLapsValue, bestLapTimeText, bestLapTimeValue, timedRaceMinutesSpinner, raceLapsSpinner, resetButton, timedRacePlusLapButton, timedRaceMinLapButton
-    global extraLiters, extraLitersMinButton, extraLitersPlusButton, extraLitersValue
+    global extraLiters, extraLitersMinButton, extraLitersPlusButton, extraLitersValue, raceTypeValue, averageFuelPerLapText, extraLitersText, timedRaceText, toggleAppSizeButton
 
     try:
         row = 0
         x_offset = 5
         y_offset = 20
 
-        createLabel("averageFuelPerLapText", "Avg fuel per lap : ", x_offset, row * y_offset, defaultFontSize, "left")
+#        createLabel("raceFuelNeededText", "Race fuel needed : ", x_offset, row * y_offset, defaultFontSize, "left")
+        raceFuelNeededValue = createLabel("raceFuelNeededValue", "Race fuel needed : --", x_app_size / 2, row * y_offset, defaultFontSize + 4, "center")
+        row += 1
+        raceTypeValue = createLabel("raceTypeValue", "", x_app_size / 2, row * y_offset, defaultFontSize, "center")
+        toggleAppSizeButton = ac.addButton(mainApp, "+")
+        ac.setPosition(toggleAppSizeButton, x_app_size - 20 - x_offset, row * y_offset)
+        ac.setSize(toggleAppSizeButton, 20, 20)
+        ac.addOnClickedListener(toggleAppSizeButton, onToggleAppSizeButtonClickedListener)
+        row += 2
+        averageFuelPerLapText = createLabel("averageFuelPerLapText", "Avg fuel per lap : ", x_offset, row * y_offset, defaultFontSize, "left")
         averageFuelPerLapValue = createLabel("averageFuelPerLapValue", "--", x_app_size - x_offset, row * y_offset, defaultFontSize, "right")
         row += 1
-        createLabel("raceFuelNeededText", "Race fuel needed : ", x_offset, row * y_offset, defaultFontSize, "left")
-        raceFuelNeededValue = createLabel("raceFuelNeededValue", "--", x_app_size - x_offset, row * y_offset, defaultFontSize, "right")
-        row += 1
-        createLabel("extraLitersLabel", "Extra liters : ", x_offset, row * y_offset, defaultFontSize, "left")
+        extraLitersText = createLabel("extraLitersText", "Extra liters : ", x_offset, row * y_offset, defaultFontSize, "left")
         extraLitersValue = createLabel("extraLitersValue", "--", x_app_size - x_offset, row * y_offset, defaultFontSize, "right")
         extraLitersMinButton = ac.addButton(mainApp, "-")
         ac.setPosition(extraLitersMinButton, 180, row * y_offset)
@@ -160,7 +173,7 @@ def createUI():
         ac.setSize(extraLitersPlusButton, 20, 20)
         ac.addOnClickedListener(extraLitersPlusButton, onExtraLitersPlusButtonClickedListener)
         row += 1
-        createLabel("timedRaceLabel", "Is timed race : ", x_offset, row * y_offset, defaultFontSize, "left")
+        timedRaceText = createLabel("timedRaceText", "Is timed race : ", x_offset, row * y_offset, defaultFontSize, "left")
         timedRaceCheckbox = ac.addCheckBox(mainApp, "")
         ac.setPosition(timedRaceCheckbox, x_app_size - (x_offset + 15), row * y_offset + 4)
         ac.setSize(timedRaceCheckbox, 15, 15)
@@ -213,16 +226,50 @@ def createUI():
         showMessage("Error: " + traceback.format_exc())
 
 def updateUIVisibility():
-    global isTimedRace, raceTotalLapsText, raceTotalLapsValue, bestLapTimeText, bestLapTimeValue, timedRaceMinutesSpinner, raceLapsSpinner, timedRaceMinLapButton, timedRacePlusLapButton
+    global mainApp, x_app_size, y_app_size, x_app_min_size, y_app_min_size, minimised
+    global isTimedRace, raceTotalLapsText, raceTotalLapsValue, bestLapTimeText, bestLapTimeValue, timedRaceMinutesSpinner, raceLapsSpinner, timedRaceMinLapButton, timedRacePlusLapButton, averageFuelPerLapText, extraLitersText, timedRaceText
+    global extraLitersMinButton, extraLitersPlusButton, resetButton, timedRaceCheckbox, extraLitersValue, averageFuelPerLapValue
 
-    ac.setVisible(raceTotalLapsText, isTimedRace)
-    ac.setVisible(raceTotalLapsValue, isTimedRace)
-    ac.setVisible(bestLapTimeText, isTimedRace)
-    ac.setVisible(bestLapTimeValue, isTimedRace)
-    ac.setVisible(timedRaceMinutesSpinner, isTimedRace)
-    ac.setVisible(timedRaceMinLapButton, isTimedRace)
-    ac.setVisible(timedRacePlusLapButton, isTimedRace)
-    ac.setVisible(raceLapsSpinner, not isTimedRace)
+    if minimised:
+        ac.setSize(mainApp, x_app_min_size, y_app_min_size)
+        ac.setVisible(raceTotalLapsText, False)
+        ac.setVisible(raceTotalLapsValue, False)
+        ac.setVisible(bestLapTimeText, False)
+        ac.setVisible(bestLapTimeValue, False)
+        ac.setVisible(timedRaceMinutesSpinner, False)
+        ac.setVisible(timedRaceMinLapButton, False)
+        ac.setVisible(timedRacePlusLapButton, False)
+        ac.setVisible(raceLapsSpinner, False)
+        ac.setVisible(averageFuelPerLapText, False)
+        ac.setVisible(extraLitersText, False)
+        ac.setVisible(timedRaceText, False)
+        ac.setVisible(extraLitersMinButton, False)
+        ac.setVisible(extraLitersPlusButton, False)
+        ac.setVisible(resetButton, False)
+        ac.setVisible(timedRaceCheckbox, False)
+        ac.setVisible(extraLitersValue, False)
+        ac.setVisible(averageFuelPerLapValue, False)
+    else:
+        ac.setSize(mainApp, x_app_size, y_app_size)
+        ac.setVisible(averageFuelPerLapText, True)
+        ac.setVisible(extraLitersText, True)
+        ac.setVisible(timedRaceText, True)
+        ac.setVisible(extraLitersMinButton, True)
+        ac.setVisible(extraLitersPlusButton, True)
+        ac.setVisible(resetButton, True)
+        ac.setVisible(timedRaceCheckbox, True)
+        ac.setVisible(extraLitersValue, True)
+        ac.setVisible(averageFuelPerLapValue, True)
+        ac.setVisible(raceTotalLapsText, isTimedRace)
+        ac.setVisible(raceTotalLapsValue, isTimedRace)
+        ac.setVisible(bestLapTimeText, isTimedRace)
+        ac.setVisible(bestLapTimeValue, isTimedRace)
+        ac.setVisible(timedRaceMinutesSpinner, isTimedRace)
+        ac.setVisible(timedRaceMinLapButton, isTimedRace)
+        ac.setVisible(timedRacePlusLapButton, isTimedRace)
+        ac.setVisible(raceLapsSpinner, not isTimedRace)
+
+    updateFuelEstimate()
 
 def onMainAppActivatedListener(*args):
     global mainAppIsActive
@@ -309,7 +356,12 @@ def acUpdate(deltaT):
 
 def updateFuelEstimate():
     global averageFuelPerLap, timedRaceMinutes, extraLiters, timedRaceExtraLaps, isTimedRace, raceLaps, bestLapTime
-    global averageFuelPerLapValue, raceFuelNeededValue, raceTotalLapsValue, extraLitersValue
+    global averageFuelPerLapValue, raceFuelNeededValue, raceTotalLapsValue, extraLitersValue, raceTypeValue
+
+    if isTimedRace:
+        ac.setText(raceTypeValue, "for a %d minutes timed race" % (timedRaceMinutes))
+    else:
+        ac.setText(raceTypeValue, "for a %d laps race" % (raceLaps))
 
     ac.setText(extraLitersValue, str(extraLiters))
 
@@ -335,16 +387,23 @@ def updateFuelEstimate():
         else:
             ac.setText(raceTotalLapsValue, "%.1f" % (laps))
 
-        ac.setText(raceFuelNeededValue, str(fuelNeeded))
+        ac.setText(raceFuelNeededValue, "Race fuel needed : %d" % (fuelNeeded))
         ac.setText(bestLapTimeValue,  "{:.0f}:{:06.3f}".format(bestLapValueMinutes, bestLapValueSeconds)[:-1])
     else:
+        ac.setText(raceFuelNeededValue, "Race fuel needed : --")
         ac.setText(averageFuelPerLapValue, "--")
         ac.setText(raceTotalLapsValue, "--")
-        ac.setText(raceFuelNeededValue, "--")
         ac.setText(bestLapTimeValue,  "--")
 
+def onToggleAppSizeButtonClickedListener(*args):
+    global minimised
+
+    minimised = not minimised
+
+    updateUIVisibility()
+
 def onTimedRaceChangedListener(*args):
-    global isTimedRace, timedRaceCheckbox
+    global isTimedRace
 
     if isTimedRace:
         isTimedRace = False
@@ -352,7 +411,6 @@ def onTimedRaceChangedListener(*args):
         isTimedRace = True
 
     updateUIVisibility()
-    updateFuelEstimate()
 
 def onTimedRaceMinutesChangedListener(*args):
     global timedRaceMinutesSpinner, timedRaceMinutes
@@ -403,7 +461,7 @@ def acShutdown(*args):
     global mainAppIsActive
 
 def createLabel(name, text, x, y, font_size = 14, align = "center"):
-    global mainApp, labels
+    global mainApp
 
     label = ac.addLabel(mainApp, name)
     ac.setText(label, text)
