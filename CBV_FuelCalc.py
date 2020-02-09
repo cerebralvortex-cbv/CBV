@@ -1,4 +1,4 @@
-version = "0.4"
+version = "0.9"
 
 import ac, acsys, platform, os, sys, time, re, configparser, traceback, random, math
 
