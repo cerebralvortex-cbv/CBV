@@ -1,6 +1,8 @@
 version = "0.9"
 
 import ac, acsys, platform, os, sys, time, re, configparser, traceback, random, math
+from module.debug import debug
+from module.data import FuelCalcData
 
 try:
     if platform.architecture()[0] == "64bit":
@@ -86,7 +88,12 @@ timedRaceMinLapButton = 0
 raceLapsSpinner = 0
 raceLaps = 10
 resetButton = 0
-percentOfBestLapTime = 1.07
+percentOfBestLapTime = 1.03
+
+persistedCalcData = None
+multipleSessionsCalcData = None
+currentSessionCalcData = None
+shownCalcData = None
 
 def acMain(ac_version):
     global version, appName, mainApp, x_app_size, y_app_size, backgroundOpacity, customFontName
@@ -116,6 +123,7 @@ def acMain(ac_version):
 
 def getSettings():
     global isTimedRace, timedRaceCheckbox, timedRaceMinutesSpinner, timedRaceMinutes, raceLapsSpinner, raceLaps, percentOfBestLapTime
+    global extraLiters, isTimedRace, timedRaceMinutes, raceLaps, percentOfBestLapTime
 
     try:
         settingsFilePath = os.path.dirname(__file__)+'/settings/settings.ini'
@@ -127,7 +135,6 @@ def getSettings():
         settingsParser.optionxform = str
         settingsParser.read(settingsFilePath)
 
-        defaultFontSize = int(getSettingsValue(settingsParser, settingsSectionGeneral, "defaultFontSize", 14))
         extraLiters = int(getSettingsValue(settingsParser, settingsSectionFUELCALC, "extraLiters", 2))
         isTimedRace = getSettingsValue(settingsParser, settingsSectionFUELCALC, "isTimedRace", True, True)
         timedRaceMinutes = int(getSettingsValue(settingsParser, settingsSectionFUELCALC, "timedRaceMinutes", 20))
@@ -231,7 +238,7 @@ def createUI():
         showMessage("Error: " + traceback.format_exc())
 
 def updateUIVisibility():
-    global mainApp, x_app_size, y_app_size, x_app_min_size, y_app_min_size, minimised
+    global mainApp, x_app_size, y_app_size, x_app_min_size, y_app_min_size, minimised, shownCalcData
     global isTimedRace, raceTotalLapsText, raceTotalLapsValue, bestLapTimeText, bestLapTimeValue, timedRaceMinutesSpinner, raceLapsSpinner, timedRaceMinLapButton, timedRacePlusLapButton, averageFuelPerLapText, extraLitersText, timedRaceText
     global extraLitersMinButton, extraLitersPlusButton, resetButton, timedRaceCheckbox, extraLitersValue, averageFuelPerLapValue, fuelLapsCountedText, fuelLapsCountedValue
 
@@ -278,7 +285,7 @@ def updateUIVisibility():
         ac.setVisible(timedRacePlusLapButton, isTimedRace)
         ac.setVisible(raceLapsSpinner, not isTimedRace)
 
-    updateFuelEstimate()
+    updateFuelEstimate(shownCalcData)
 
 def onMainAppActivatedListener(*args):
     global mainAppIsActive
@@ -295,7 +302,7 @@ def onMainAppDismissedListener(*args):
     debug("Main app is inactive")
 
 def onMainAppFormRender(deltaT):
-    global formTimer, waitingForSessionType, previousSessionType, waitTimeSessionType, timerSessionType, completedLaps
+    global formTimer
 
     formTimer += deltaT
     if formTimer < 0.200:
@@ -306,6 +313,7 @@ def onMainAppFormRender(deltaT):
 def acUpdate(deltaT):
     global mainAppIsActive, timer
     global averageFuelPerLap, fuelLastLap, completedLaps, fuelAtLapStart, distanceTraveledAtStart, fuelAtStart, lastFuelMeasurement, lastDistanceTraveled, fuelLapsCounted, fuelUsedForCountedLaps, percentOfBestLapTime, bestLapTime, previousSessionType, fuelRemaining
+    global currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, shownCalcData
 
     timer += deltaT
     if timer < 0.025:
@@ -317,54 +325,48 @@ def acUpdate(deltaT):
         remaining = sm.physics.fuel
         currentLap = sm.graphics.completedLaps
         totalLaps = sm.graphics.numberOfLaps
-        distanceTraveled = sm.graphics.distanceTraveled
-        isInPit = sm.graphics.isInPit
-        inPitLane = ac.isCarInPitline(0)
         maxFuel = sm.static.maxFuel
-        normalizedSplinePosition = round(sm.graphics.normalizedCarPosition, 4)
         session = sm.graphics.session
         if previousSessionType != session or remaining > fuelRemaining:
             previousSessionType = session
             completedLaps = 0
+            if currentSessionCalcData == None:
+                currentSessionCalcData = FuelCalcData()
+                shownCalcData = currentSessionCalcData
+            else:
+                currentSessionCalcData.reset()
+
             debug("Session type changed to " + str(session))
 
-        if currentLap >= 1 and bestLapTime == -1 or (sm.graphics.iBestTime != 0 and sm.graphics.iBestTime < bestLapTime):
-            bestLapTime = sm.graphics.iBestTime
-            debug("New best lap time posted : " + str(bestLapTime))
-
-        lastLapTime = sm.graphics.iLastTime
         fuelRemaining = remaining
 
         if currentLap != completedLaps: #when crossed finish line
-            debug("Current Lap %d, fuelAtLapStart = %.1f, remaining = %.1f" % (currentLap, fuelAtLapStart, remaining))
+            # debug("Current Lap %d, fuelAtLapStart = %.1f, remaining = %.1f" % (currentLap, fuelAtLapStart, remaining))
 
             if currentLap >= 2 and fuelAtLapStart > remaining: #if more than 2 laps driven
-                thresholdLapTime = bestLapTime * percentOfBestLapTime
+                lastLapTime = sm.graphics.iLastTime
+                fuelLastLap = fuelAtLapStart - remaining # calculate fuel used last lap
 
-                debug("lastLapTime = %.3f, thresholdLapTime = %.3f" % (lastLapTime, thresholdLapTime))
+                if multipleSessionsCalcData == None:
+                    multipleSessionsCalcData = FuelCalcData()
 
-                if lastLapTime > thresholdLapTime:
-                    debug("Last lap was too slow, fuel not counted")
-                else:
-                    fuelLastLap = fuelAtLapStart - remaining # calculate fuel used last lap
-                    fuelLapsCounted += 1
-                    fuelUsedForCountedLaps += fuelLastLap
-                    # averageFuelPerLap = (averageFuelPerLap * (currentLap - 2) + fuelLastLap) / (currentLap - 1) #calculate AverageFuelPerLap
-                    averageFuelPerLap = fuelUsedForCountedLaps / fuelLapsCounted
-                    debug("AverageFuelPerLap = %.3f" % (averageFuelPerLap))
-                    updateFuelEstimate()
+                if persistedCalcData == None:
+                    persistedCalcData = FuelCalcData()
+
+                currentSessionCalcData.updateCalcData(fuelLastLap, lastLapTime, percentOfBestLapTime)
+                multipleSessionsCalcData.updateCalcData(fuelLastLap, lastLapTime, percentOfBestLapTime)
+                persistedCalcData.updateCalcData(fuelLastLap, lastLapTime, percentOfBestLapTime)
+
+                updateFuelEstimate(shownCalcData)
 
             fuelAtLapStart = remaining #reset fuelAtLapStart
             completedLaps = currentLap #set completedLaps
-
-            debug("fuelLapsCounted %d, fuelUsedForCountedLaps = %.1f" % (fuelLapsCounted, fuelUsedForCountedLaps))
-
-    except exception:
+    except Exception:
         debug(repr(traceback.format_exception(exc_type, exc_value, exc_traceback)))
         showMessage("Error: " + traceback.format_exc())
 
-def updateFuelEstimate():
-    global averageFuelPerLap, timedRaceMinutes, extraLiters, timedRaceExtraLaps, isTimedRace, raceLaps, bestLapTime, fuelLapsCounted
+def updateFuelEstimate(calcData):
+    global averageFuelPerLap, timedRaceMinutes, extraLiters, timedRaceExtraLaps, isTimedRace, raceLaps, fuelRemaining
     global averageFuelPerLapValue, raceFuelNeededValue, raceTotalLapsValue, extraLitersValue, raceTypeValue, fuelLapsCountedText, fuelLapsCountedValue
 
     if isTimedRace:
@@ -374,20 +376,20 @@ def updateFuelEstimate():
 
     ac.setText(extraLitersValue, str(extraLiters))
 
-    if averageFuelPerLap != 0.0 and bestLapTime != -1:
+    if calcData != None and calcData.hasData() and calcData.averageFuelUsed() != 0.0 and calcData.bestLapTime != -1:
         raceTime = timedRaceMinutes * 60 * 1000
 
         if isTimedRace:
-            laps = (raceTime / bestLapTime) + timedRaceExtraLaps
+            laps = (raceTime / calcData.bestLapTime) + timedRaceExtraLaps
         else:
             laps = raceLaps
 
-        fuelNeeded = math.ceil(math.ceil(laps) * averageFuelPerLap) + extraLiters
-        bestLapValueSeconds = (bestLapTime / 1000) % 60
-        bestLapValueMinutes = (bestLapTime // 1000) // 60
+        fuelNeeded = math.ceil(math.ceil(laps) * calcData.averageFuelUsed()) + extraLiters
+        bestLapValueSeconds = (calcData.bestLapTime / 1000) % 60
+        bestLapValueMinutes = (calcData.bestLapTime // 1000) // 60
 
-        ac.setText(averageFuelPerLapValue, "%.3f" % (averageFuelPerLap))
-        ac.setText(fuelLapsCountedValue, "%d" % (fuelLapsCounted))
+        ac.setText(averageFuelPerLapValue, "%.3f" % (calcData.averageFuelUsed()))
+        ac.setText(fuelLapsCountedValue, "%d" % (calcData.fuelLapsCounted))
 
         if timedRaceExtraLaps != 0:
             if timedRaceExtraLaps > 0:
@@ -397,10 +399,10 @@ def updateFuelEstimate():
         else:
             ac.setText(raceTotalLapsValue, "%.1f" % (laps))
 
-        ac.setText(raceFuelNeededValue, "Race fuel needed : %d" % (fuelNeeded))
+        ac.setText(raceFuelNeededValue, "Race fuel needed : %d (%.1f)" % (fuelNeeded, fuelRemaining))
         ac.setText(bestLapTimeValue,  "{:.0f}:{:06.3f}".format(bestLapValueMinutes, bestLapValueSeconds)[:-1])
     else:
-        ac.setText(raceFuelNeededValue, "Race fuel needed : --")
+        ac.setText(raceFuelNeededValue, "Race fuel needed : -- (%.1f)" % (fuelRemaining))
         ac.setText(averageFuelPerLapValue, "--")
         ac.setText(raceTotalLapsValue, "--")
         ac.setText(bestLapTimeValue,  "--")
@@ -424,48 +426,48 @@ def onTimedRaceChangedListener(*args):
     updateUIVisibility()
 
 def onTimedRaceMinutesChangedListener(*args):
-    global timedRaceMinutesSpinner, timedRaceMinutes
+    global timedRaceMinutesSpinner, timedRaceMinutes, shownCalcData
 
     timedRaceMinutes = ac.getValue(timedRaceMinutesSpinner)
-    updateFuelEstimate()
+    updateFuelEstimate(shownCalcData)
 
 def onTimedRaceMinLapButtonClickedListener(*args):
-    global timedRaceExtraLaps
+    global timedRaceExtraLaps, shownCalcData
 
     timedRaceExtraLaps -= 1
-    updateFuelEstimate()
+    updateFuelEstimate(shownCalcData)
 
 def onTimedRacePlusLapButtonClickedListener(*args):
-    global timedRaceExtraLaps
+    global timedRaceExtraLaps, shownCalcData
 
     timedRaceExtraLaps += 1
-    updateFuelEstimate()
+    updateFuelEstimate(shownCalcData)
 
 def onExtraLitersMinButtonClickedListener(*args):
-    global extraLiters
+    global extraLiters, shownCalcData
 
     extraLiters -= 1
-    updateFuelEstimate()
+    updateFuelEstimate(shownCalcData)
 
 def onExtraLitersPlusButtonClickedListener(*args):
-    global extraLiters
+    global extraLiters, shownCalcData
 
     extraLiters += 1
-    updateFuelEstimate()
+    updateFuelEstimate(shownCalcData)
 
 def onRaceLapsChangedListener(*args):
-    global raceLapsSpinner, raceLaps
+    global raceLapsSpinner, raceLaps, shownCalcData
 
     raceLaps = ac.getValue(raceLapsSpinner)
-    updateFuelEstimate()
+    updateFuelEstimate(shownCalcData)
 
 def onResetClickedListener(*args):
-    global averageFuelPerLap, fuelLapsCounted, fuelUsedForCountedLaps
+    global averageFuelPerLap, fuelLapsCounted, fuelUsedForCountedLaps, shownCalcData
 
     averageFuelPerLap = 0.0
     fuelLapsCounted = 0
     fuelUsedForCountedLaps = 0.0
-    updateFuelEstimate()
+    updateFuelEstimate(shownCalcData)
 
 def acShutdown(*args):
     global mainAppIsActive
@@ -497,9 +499,3 @@ def setSettingsValue(parser, section, option, value):
 
     parser.set(str(section), str(option), str(value))
     return value
-
-def debug(message):
-    global appName
-
-    ac.log(appName + ": " + message)
-    ac.console(appName + ": " + message)
