@@ -330,11 +330,19 @@ def acUpdate(deltaT):
         if previousSessionType != session or remaining > fuelRemaining:
             previousSessionType = session
             completedLaps = 0
+
             if currentSessionCalcData == None:
-                currentSessionCalcData = FuelCalcData()
-                shownCalcData = currentSessionCalcData
+                currentSessionCalcData = FuelCalcData(sm.static.track, sm.static.carModel, False)
             else:
                 currentSessionCalcData.reset()
+
+            if multipleSessionsCalcData == None:
+                multipleSessionsCalcData = FuelCalcData(sm.static.track, sm.static.carModel, False)
+
+            if persistedCalcData == None:
+                persistedCalcData = FuelCalcData(sm.static.track, sm.static.carModel, True)
+                shownCalcData = persistedCalcData
+                updateFuelEstimate(shownCalcData)
 
             debug("Session type changed to " + str(session))
 
@@ -346,12 +354,6 @@ def acUpdate(deltaT):
             if currentLap >= 2 and fuelAtLapStart > remaining: #if more than 2 laps driven
                 lastLapTime = sm.graphics.iLastTime
                 fuelLastLap = fuelAtLapStart - remaining # calculate fuel used last lap
-
-                if multipleSessionsCalcData == None:
-                    multipleSessionsCalcData = FuelCalcData()
-
-                if persistedCalcData == None:
-                    persistedCalcData = FuelCalcData()
 
                 currentSessionCalcData.updateCalcData(fuelLastLap, lastLapTime, percentOfBestLapTime)
                 multipleSessionsCalcData.updateCalcData(fuelLastLap, lastLapTime, percentOfBestLapTime)
@@ -464,9 +466,7 @@ def onRaceLapsChangedListener(*args):
 def onResetClickedListener(*args):
     global averageFuelPerLap, fuelLapsCounted, fuelUsedForCountedLaps, shownCalcData
 
-    averageFuelPerLap = 0.0
-    fuelLapsCounted = 0
-    fuelUsedForCountedLaps = 0.0
+    shownCalcData.reset()
     updateFuelEstimate(shownCalcData)
 
 def acShutdown(*args):
