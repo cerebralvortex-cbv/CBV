@@ -1,4 +1,4 @@
-version = "0.9"
+version = "1.0"
 
 import ac, acsys, platform, os, sys, time, re, configparser, traceback, random, math
 from module.debug import debug
@@ -78,6 +78,7 @@ fuelLapsCounted = 0
 fuelUsedForCountedLaps = 0.0
 bestLapTime = -1
 currentLapReset = False
+wasInPit = False
 
 # config
 
@@ -360,7 +361,7 @@ def onMainAppFormRender(deltaT):
 def acUpdate(deltaT):
     global mainAppIsActive, timer
     global averageFuelPerLap, fuelLastLap, completedLaps, fuelAtLapStart, distanceTraveledAtStart, fuelAtStart, lastFuelMeasurement, lastDistanceTraveled, fuelLapsCounted, fuelUsedForCountedLaps, percentOfBestLapTime, bestLapTime, currentSessionType, fuelRemaining
-    global currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, shownCalcData, currentLapReset
+    global currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, shownCalcData, currentLapReset, wasInPit
 
     timer += deltaT
     if timer < 0.025:
@@ -372,9 +373,11 @@ def acUpdate(deltaT):
         remaining = sm.physics.fuel
         currentLap = sm.graphics.completedLaps
         totalLaps = sm.graphics.numberOfLaps
+        isInPit = sm.graphics.isInPit
         maxFuel = sm.static.maxFuel
         session = sm.graphics.session
-        if currentSessionType != session or remaining > fuelRemaining:
+
+        if currentSessionType != session:
             currentSessionType = session
             completedLaps = 0
 
@@ -398,15 +401,19 @@ def acUpdate(deltaT):
 
             debug("Session type changed to " + str(session))
 
+        if isInPit and not wasInPit:
+            wasInPit = True
+            debug("is in pit")
+
         fuelRemaining = remaining
 
         if currentSessionType == 2:
             updateFuelEstimate()
 
         if currentLap != completedLaps: #when crossed finish line
-            # debug("Current Lap %d, fuelAtLapStart = %.1f, remaining = %.1f" % (currentLap, fuelAtLapStart, remaining))
+            # debug("Current Lap %d, completedLaps %d, fuelAtLapStart = %.1f, remaining = %.1f" % (currentLap, completedLaps, fuelAtLapStart, remaining))
 
-            if not currentLapReset and currentLap >= 2 and fuelAtLapStart > remaining: #if more than 2 laps driven
+            if not currentLapReset and not wasInPit and currentLap >= 2 and fuelAtLapStart > remaining: #if more than 2 laps driven
                 lastLapTime = sm.graphics.iLastTime
                 fuelLastLap = fuelAtLapStart - remaining # calculate fuel used last lap
 
@@ -419,6 +426,7 @@ def acUpdate(deltaT):
             fuelAtLapStart = remaining #reset fuelAtLapStart
             completedLaps = currentLap #set completedLaps
             currentLapReset = False
+            wasInPit = False
     except Exception:
         debug(repr(traceback.format_exception(exc_type, exc_value, exc_traceback)))
         showMessage("Error: " + traceback.format_exc())
