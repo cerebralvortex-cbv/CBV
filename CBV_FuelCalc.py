@@ -80,6 +80,7 @@ bestLapTime = -1
 currentLapReset = False
 wasInPit = False
 timedRaceTotalSessionTime = -1
+raceCrossedStartLine = False
 
 # config
 
@@ -437,7 +438,7 @@ def acUpdate(deltaT):
 
 def updateFuelEstimate():
     global averageFuelPerLap, timedRaceMinutes, extraLiters, timedRaceExtraLaps, isTimedRace, raceLaps, fuelRemaining, currentSessionType
-    global averageFuelPerLapValue, raceFuelNeededValue, raceTotalLapsValue, extraLitersValue, raceTypeValue, fuelLapsCountedText, fuelLapsCountedValue, completedLapsValue, shownCalcData, averageLapTimeValue
+    global averageFuelPerLapValue, raceFuelNeededValue, raceTotalLapsValue, extraLitersValue, raceTypeValue, fuelLapsCountedText, fuelLapsCountedValue, completedLapsValue, shownCalcData, averageLapTimeValue, raceCrossedStartLine
 
     calcData = shownCalcData
 
@@ -486,13 +487,21 @@ def updateFuelEstimate():
                 ac.setText(raceTypeValue, "Remaining : %.1f liter, %d laps" % (fuelRemaining, lapsRemaining))
 
             currentLap = ac.getCarState(0, acsys.CS.LapCount)
-            lapCount = ac.getCarState(0, acsys.CS.LapCount) + ac.getCarState(0, acsys.CS.NormalizedSplinePosition)
+            lapPosition = ac.getCarState(0, acsys.CS.NormalizedSplinePosition)
+            if !raceCrossedStartLine:
+                if lapPosition < 0.5:
+                    raceCrossedStartLine = True
+
+            lapCount = currentLap
+            if raceCrossedStartLine:
+                lapCount = currentLap + lapPosition
+
             lapRemaining = expectedNumberOfLaps - lapCount
             fuelEndOfRace = fuelRemaining - (lapRemaining * calcData.averageFuelUsed())
 
             # TODO: Wrong lapRemaining at race start before crossing start/finish line
 
-            ac.setText(raceFuelNeededValue, "Fuel end of race : %d (%.1f) (%.1f) (%.1f)" % (fuelEndOfRace, lapRemaining, lapCount, ac.getCarState(0, acsys.CS.NormalizedSplinePosition)))
+            ac.setText(raceFuelNeededValue, "Fuel end of race : %d (%.1f) (%.1f)" % (fuelEndOfRace, lapRemaining, lapCount))
         else:
             ac.setText(raceFuelNeededValue, "Race fuel needed : %d" % (fuelNeeded))
 
