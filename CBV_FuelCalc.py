@@ -81,6 +81,8 @@ currentLapReset = False
 wasInPit = False
 timedRaceTotalSessionTime = -1
 raceCrossedStartLine = False
+sessionStartTime = -1
+sessionChangedDetections = 0
 
 # config
 
@@ -363,7 +365,7 @@ def onMainAppFormRender(deltaT):
 def acUpdate(deltaT):
     global mainAppIsActive, timer
     global averageFuelPerLap, fuelLastLap, completedLaps, fuelAtLapStart, distanceTraveledAtStart, fuelAtStart, lastFuelMeasurement, lastDistanceTraveled, fuelLapsCounted, fuelUsedForCountedLaps, percentOfBestLapTime, bestLapTime, currentSessionType, fuelRemaining
-    global currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, shownCalcData, currentLapReset, wasInPit, timedRaceTotalSessionTime
+    global currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, shownCalcData, currentLapReset, wasInPit, timedRaceTotalSessionTime, sessionStartTime, sessionChangedDetections, raceCrossedStartLine
 
     timer += deltaT
     if timer < 0.025:
@@ -380,28 +382,9 @@ def acUpdate(deltaT):
         session = sm.graphics.session
 
         if currentSessionType != session:
-            currentSessionType = session
-            completedLaps = 0
-
-            if currentSessionCalcData == None:
-                currentSessionCalcData = FuelCalcData(sm.static.track, sm.static.carModel, False)
-            else:
-                currentSessionCalcData.reset()
-
-            if multipleSessionsCalcData == None:
-                multipleSessionsCalcData = FuelCalcData(sm.static.track, sm.static.carModel, False)
-
-            if persistedCalcData == None:
-                persistedCalcData = FuelCalcData(sm.static.track, sm.static.carModel, True)
-                if persistedCalcData.hasData():
-                    shownCalcData = persistedCalcData
-                else:
-                    shownCalcData = multipleSessionsCalcData
-
-            updateCalcTypeUI()
-            updateFuelEstimate()
-
-            debug("Session type changed to " + str(session))
+            sessionChangedDetections += 1
+            if sessionChangedDetections > 5:
+                initNewSession(session)
 
         if isInPit and not wasInPit:
             wasInPit = True
@@ -410,9 +393,14 @@ def acUpdate(deltaT):
         fuelRemaining = remaining
 
         if currentSessionType == 2:
-            if timedRaceTotalSessionTime == -1:
-                timedRaceTotalSessionTime = sm.graphics.sessionTimeLeft
-
+            lapPosition = ac.getCarState(0, acsys.CS.NormalizedSplinePosition)
+            currentSectorIndex = sm.graphics.currentSectorIndex
+            if not raceCrossedStartLine and currentSectorIndex == 0 and lapPosition < 0.1:
+                debug("Crossed start line, lap position = %.1f ; sector = %d" % (lapPosition, currentSectorIndex))
+                raceCrossedStartLine = True
+                if timedRaceTotalSessionTime == -1 and sm.static.isTimedRace == 1:
+                    timedRaceTotalSessionTime = sm.graphics.sessionTimeLeft / 1000
+                    debug("Timed race total session time %d" % (timedRaceTotalSessionTime))
             updateFuelEstimate()
 
         if currentLap != completedLaps: #when crossed finish line
@@ -436,8 +424,36 @@ def acUpdate(deltaT):
         debug(repr(traceback.format_exception(exc_type, exc_value, exc_traceback)))
         showMessage("Error: " + traceback.format_exc())
 
+def initNewSession(session):
+    global sessionChangedDetections, currentSessionType, sessionStartTime, completedLaps, shownCalcData, currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, timedRaceTotalSessionTime
+
+    currentSessionType = session
+    sessionStartTime = time.time()
+    completedLaps = 0
+    sessionChangedDetections = 0
+
+    debug("Session type changed to " + str(session))
+
+    if currentSessionCalcData == None:
+        currentSessionCalcData = FuelCalcData(sm.static.track, sm.static.carModel, False)
+    else:
+        currentSessionCalcData.reset()
+
+    if multipleSessionsCalcData == None:
+        multipleSessionsCalcData = FuelCalcData(sm.static.track, sm.static.carModel, False)
+
+    if persistedCalcData == None:
+        persistedCalcData = FuelCalcData(sm.static.track, sm.static.carModel, True)
+        if persistedCalcData.hasData():
+            shownCalcData = persistedCalcData
+        else:
+            shownCalcData = multipleSessionsCalcData
+
+    updateCalcTypeUI()
+    updateFuelEstimate()
+
 def updateFuelEstimate():
-    global averageFuelPerLap, timedRaceMinutes, extraLiters, timedRaceExtraLaps, isTimedRace, raceLaps, fuelRemaining, currentSessionType
+    global averageFuelPerLap, timedRaceMinutes, extraLiters, timedRaceExtraLaps, isTimedRace, raceLaps, fuelRemaining, currentSessionType, sessionStartTime, timedRaceTotalSessionTime
     global averageFuelPerLapValue, raceFuelNeededValue, raceTotalLapsValue, extraLitersValue, raceTypeValue, fuelLapsCountedText, fuelLapsCountedValue, completedLapsValue, shownCalcData, averageLapTimeValue, raceCrossedStartLine
 
     calcData = shownCalcData
@@ -476,7 +492,7 @@ def updateFuelEstimate():
         else:
             ac.setText(raceTotalLapsValue, "%.1f" % (laps))
 
-        if currentSessionType == 2:
+        if currentSessionType == 2 and expectedNumberOfLaps != -1:
             if sm.static.isTimedRace == 1:
                 timeRemaining = (fuelRemaining / calcData.averageFuelUsed()) * calcData.averageLapTime();
                 timeRemainingSeconds = (timeRemaining / 1000) % 60
@@ -488,9 +504,6 @@ def updateFuelEstimate():
 
             currentLap = ac.getCarState(0, acsys.CS.LapCount)
             lapPosition = ac.getCarState(0, acsys.CS.NormalizedSplinePosition)
-            if !raceCrossedStartLine:
-                if lapPosition < 0.5:
-                    raceCrossedStartLine = True
 
             lapCount = currentLap
             if raceCrossedStartLine:
@@ -498,9 +511,6 @@ def updateFuelEstimate():
 
             lapRemaining = expectedNumberOfLaps - lapCount
             fuelEndOfRace = fuelRemaining - (lapRemaining * calcData.averageFuelUsed())
-
-            # TODO: Wrong lapRemaining at race start before crossing start/finish line
-
             ac.setText(raceFuelNeededValue, "Fuel end of race : %d (%.1f) (%.1f)" % (fuelEndOfRace, lapRemaining, lapCount))
         else:
             ac.setText(raceFuelNeededValue, "Race fuel needed : %d" % (fuelNeeded))
@@ -537,19 +547,22 @@ def getExpectedRaceLaps():
     if sm.static.isTimedRace != 1:
         return sm.graphics.numberOfLaps + extraLap
     else:
-        numberOfCars = ac.getCarsCount()
-        carIds = range(0, ac.getCarsCount(), 1)
-        for carId in carIds:
-            if str(ac.getCarName(carId)) == '-1':
-                break
-            else:
-                carPosition = ac.getCarRealTimeLeaderboardPosition(carId)
-                if carPosition == 1:
-                    sessionTimeElapsed = timedRaceTotalSessionTime - sm.graphics.sessionTimeLeft
-                    lapCount = ac.getCarState(carId, acsys.CS.LapCount) + ac.getCarState(carId, acsys.CS.NormalizedSplinePosition)
-                    return math.ceil((timedRaceTotalSessionTime / sessionTimeElapsed) * lapCount)
+        if timedRaceTotalSessionTime != -1:
+            numberOfCars = ac.getCarsCount()
+            carIds = range(0, ac.getCarsCount(), 1)
+            for carId in carIds:
+                if str(ac.getCarName(carId)) == '-1':
+                    break
                 else:
-                    continue
+                    carPosition = ac.getCarRealTimeLeaderboardPosition(carId)
+                    if carPosition == 1:
+                        sessionTimeElapsed = timedRaceTotalSessionTime - sm.graphics.sessionTimeLeft
+                        lapCount = ac.getCarState(carId, acsys.CS.LapCount) + ac.getCarState(carId, acsys.CS.NormalizedSplinePosition)
+                        return math.ceil((timedRaceTotalSessionTime / sessionTimeElapsed) * lapCount)
+                    else:
+                        continue
+
+    return -1
 
 def onToggleAppSizeButtonClickedListener(*args):
     global minimised, toggleAppSizeButton
