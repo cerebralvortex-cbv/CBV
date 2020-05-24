@@ -79,6 +79,7 @@ fuelUsedForCountedLaps = 0.0
 bestLapTime = -1
 currentLapReset = False
 wasInPit = False
+timedRaceTotalSessionTime = -1
 
 # config
 
@@ -361,7 +362,7 @@ def onMainAppFormRender(deltaT):
 def acUpdate(deltaT):
     global mainAppIsActive, timer
     global averageFuelPerLap, fuelLastLap, completedLaps, fuelAtLapStart, distanceTraveledAtStart, fuelAtStart, lastFuelMeasurement, lastDistanceTraveled, fuelLapsCounted, fuelUsedForCountedLaps, percentOfBestLapTime, bestLapTime, currentSessionType, fuelRemaining
-    global currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, shownCalcData, currentLapReset, wasInPit
+    global currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, shownCalcData, currentLapReset, wasInPit, timedRaceTotalSessionTime
 
     timer += deltaT
     if timer < 0.025:
@@ -408,6 +409,9 @@ def acUpdate(deltaT):
         fuelRemaining = remaining
 
         if currentSessionType == 2:
+            if timedRaceTotalSessionTime == -1:
+                timedRaceTotalSessionTime = sm.graphics.sessionTimeLeft
+
             updateFuelEstimate()
 
         if currentLap != completedLaps: #when crossed finish line
@@ -437,8 +441,10 @@ def updateFuelEstimate():
 
     calcData = shownCalcData
 
+    expectedNumberOfLaps = -1
+
     if currentSessionType == 2:
-        ac.setText(raceTypeValue, "based on calculation type")
+        expectedNumberOfLaps = getExpectedRaceLaps()
     else:
         if isTimedRace:
             ac.setText(raceTypeValue, "for a %d minutes timed race" % (timedRaceMinutes))
@@ -474,10 +480,19 @@ def updateFuelEstimate():
                 timeRemaining = (fuelRemaining / calcData.averageFuelUsed()) * calcData.averageLapTime();
                 timeRemainingSeconds = (timeRemaining / 1000) % 60
                 timeRemainingMinutes = (timeRemaining // 1000) // 60
-                ac.setText(raceFuelNeededValue, "Remaining : %.1f liter, %.0f mins" % (fuelRemaining, timeRemainingMinutes))
+                ac.setText(raceTypeValue, "Remaining : %.1f liter, %.0f mins" % (fuelRemaining, timeRemainingMinutes))
             else:
                 lapsRemaining = fuelRemaining / calcData.averageFuelUsed()
-                ac.setText(raceFuelNeededValue, "Remaining : %.1f liter, %d laps" % (fuelRemaining, lapsRemaining))
+                ac.setText(raceTypeValue, "Remaining : %.1f liter, %d laps" % (fuelRemaining, lapsRemaining))
+
+            currentLap = ac.getCarState(0, acsys.CS.LapCount)
+            lapCount = ac.getCarState(0, acsys.CS.LapCount) + ac.getCarState(0, acsys.CS.NormalizedSplinePosition)
+            lapRemaining = expectedNumberOfLaps - lapCount
+            fuelEndOfRace = fuelRemaining - (lapRemaining * calcData.averageFuelUsed())
+
+            # TODO: Wrong lapRemaining at race start before crossing start/finish line
+
+            ac.setText(raceFuelNeededValue, "Fuel end of race : %d (%.1f) (%.1f) (%.1f)" % (fuelEndOfRace, lapRemaining, lapCount, ac.getCarState(0, acsys.CS.NormalizedSplinePosition)))
         else:
             ac.setText(raceFuelNeededValue, "Race fuel needed : %d" % (fuelNeeded))
 
@@ -502,6 +517,30 @@ def updateFuelEstimate():
         ac.setText(bestLapTimeValue,  "--")
         ac.setText(completedLapsValue, "--")
         ac.setText(fuelLapsCountedValue, "--")
+
+def getExpectedRaceLaps():
+    global timedRaceTotalSessionTime
+
+    extraLap = 0
+    if sm.static.hasExtraLap:
+        extraLap = 1
+
+    if sm.static.isTimedRace != 1:
+        return sm.graphics.numberOfLaps + extraLap
+    else:
+        numberOfCars = ac.getCarsCount()
+        carIds = range(0, ac.getCarsCount(), 1)
+        for carId in carIds:
+            if str(ac.getCarName(carId)) == '-1':
+                break
+            else:
+                carPosition = ac.getCarRealTimeLeaderboardPosition(carId)
+                if carPosition == 1:
+                    sessionTimeElapsed = timedRaceTotalSessionTime - sm.graphics.sessionTimeLeft
+                    lapCount = ac.getCarState(carId, acsys.CS.LapCount) + ac.getCarState(carId, acsys.CS.NormalizedSplinePosition)
+                    return math.ceil((timedRaceTotalSessionTime / sessionTimeElapsed) * lapCount)
+                else:
+                    continue
 
 def onToggleAppSizeButtonClickedListener(*args):
     global minimised, toggleAppSizeButton
