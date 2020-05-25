@@ -79,7 +79,7 @@ fuelUsedForCountedLaps = 0.0
 bestLapTime = -1
 currentLapReset = False
 wasInPit = False
-timedRaceTotalSessionTime = -1
+raceTotalSessionTime = -1
 raceCrossedStartLine = False
 sessionStartTime = -1
 sessionChangedDetections = 0
@@ -365,7 +365,7 @@ def onMainAppFormRender(deltaT):
 def acUpdate(deltaT):
     global mainAppIsActive, timer
     global averageFuelPerLap, fuelLastLap, completedLaps, fuelAtLapStart, distanceTraveledAtStart, fuelAtStart, lastFuelMeasurement, lastDistanceTraveled, fuelLapsCounted, fuelUsedForCountedLaps, percentOfBestLapTime, bestLapTime, currentSessionType, fuelRemaining
-    global currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, shownCalcData, currentLapReset, wasInPit, timedRaceTotalSessionTime, sessionStartTime, sessionChangedDetections, raceCrossedStartLine
+    global currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, shownCalcData, currentLapReset, wasInPit, raceTotalSessionTime, sessionStartTime, sessionChangedDetections, raceCrossedStartLine
 
     timer += deltaT
     if timer < 0.025:
@@ -395,12 +395,20 @@ def acUpdate(deltaT):
         if currentSessionType == 2:
             lapPosition = ac.getCarState(0, acsys.CS.NormalizedSplinePosition)
             currentSectorIndex = sm.graphics.currentSectorIndex
-            if not raceCrossedStartLine and currentSectorIndex == 0 and lapPosition < 0.1:
+
+            if raceTotalSessionTime == -1:
+                lapCount = ac.getCarState(0, acsys.CS.LapCount)
+                currentLapTimeMS = ac.getCarState(0, acsys.CS.LapTime)
+                isCountDown = currentLapTimeMS <= 0 and lapCount <= 0
+
+                if not isCountDown:
+                    raceTotalSessionTime = sm.graphics.sessionTimeLeft / 1000
+                    debug("Green green green - Race session time %d" % (raceTotalSessionTime))
+
+            if raceTotalSessionTime != -1 and not raceCrossedStartLine and currentSectorIndex == 0 and lapPosition < 0.1:
                 debug("Crossed start line, lap position = %.1f ; sector = %d" % (lapPosition, currentSectorIndex))
                 raceCrossedStartLine = True
-                if timedRaceTotalSessionTime == -1 and sm.static.isTimedRace == 1:
-                    timedRaceTotalSessionTime = sm.graphics.sessionTimeLeft / 1000
-                    debug("Timed race total session time %d" % (timedRaceTotalSessionTime))
+
             updateFuelEstimate()
 
         if currentLap != completedLaps: #when crossed finish line
@@ -425,11 +433,13 @@ def acUpdate(deltaT):
         showMessage("Error: " + traceback.format_exc())
 
 def initNewSession(session):
-    global sessionChangedDetections, currentSessionType, sessionStartTime, completedLaps, shownCalcData, currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, timedRaceTotalSessionTime
+    global sessionChangedDetections, currentSessionType, sessionStartTime, completedLaps, shownCalcData, currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, raceTotalSessionTime, raceCrossedStartLine
 
     currentSessionType = session
     sessionStartTime = time.time()
     completedLaps = 0
+    raceTotalSessionTime = -1
+    raceCrossedStartLine = False
     sessionChangedDetections = 0
 
     debug("Session type changed to " + str(session))
@@ -453,7 +463,7 @@ def initNewSession(session):
     updateFuelEstimate()
 
 def updateFuelEstimate():
-    global averageFuelPerLap, timedRaceMinutes, extraLiters, timedRaceExtraLaps, isTimedRace, raceLaps, fuelRemaining, currentSessionType, sessionStartTime, timedRaceTotalSessionTime
+    global averageFuelPerLap, timedRaceMinutes, extraLiters, timedRaceExtraLaps, isTimedRace, raceLaps, fuelRemaining, currentSessionType, sessionStartTime, raceTotalSessionTime
     global averageFuelPerLapValue, raceFuelNeededValue, raceTotalLapsValue, extraLitersValue, raceTypeValue, fuelLapsCountedText, fuelLapsCountedValue, completedLapsValue, shownCalcData, averageLapTimeValue, raceCrossedStartLine
 
     calcData = shownCalcData
@@ -538,7 +548,7 @@ def updateFuelEstimate():
         ac.setText(fuelLapsCountedValue, "--")
 
 def getExpectedRaceLaps():
-    global timedRaceTotalSessionTime
+    global raceTotalSessionTime, raceCrossedStartLine
 
     extraLap = 0
     if sm.static.hasExtraLap:
@@ -547,18 +557,25 @@ def getExpectedRaceLaps():
     if sm.static.isTimedRace != 1:
         return sm.graphics.numberOfLaps + extraLap
     else:
-        if timedRaceTotalSessionTime != -1:
+        if raceTotalSessionTime != -1 and raceCrossedStartLine:
             numberOfCars = ac.getCarsCount()
             carIds = range(0, ac.getCarsCount(), 1)
             for carId in carIds:
+                # debug("Getting car with ID : " + str(carId) + " ; driver name = " + str(ac.getDriverName(carId)))
                 if str(ac.getCarName(carId)) == '-1':
+                    # debug("Car name for ID is -1 - break : " + str(carId))
                     break
                 else:
                     carPosition = ac.getCarRealTimeLeaderboardPosition(carId)
-                    if carPosition == 1:
-                        sessionTimeElapsed = timedRaceTotalSessionTime - sm.graphics.sessionTimeLeft
+                    # debug("Car position = " + str(carPosition))
+                    if carPosition == 0:
+                        sessionTimeElapsed = raceTotalSessionTime - (sm.graphics.sessionTimeLeft / 1000)
+                        # debug("Session time elapsed is : %d" % (sessionTimeElapsed))
                         lapCount = ac.getCarState(carId, acsys.CS.LapCount) + ac.getCarState(carId, acsys.CS.NormalizedSplinePosition)
-                        return math.ceil((timedRaceTotalSessionTime / sessionTimeElapsed) * lapCount)
+                        # debug("Lap count is : " + str(lapCount))
+                        estimatedLaps = (raceTotalSessionTime / sessionTimeElapsed) * lapCount
+                        # debug("Estimated number of laps : " + str(estimatedLaps))
+                        return math.ceil(estimatedLaps)
                     else:
                         continue
 
