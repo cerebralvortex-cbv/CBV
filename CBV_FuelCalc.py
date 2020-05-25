@@ -259,7 +259,7 @@ def createUI():
 
         row = raceTypeRow
 
-        row += 2
+        row += 4
         raceLapsSpinner = ac.addSpinner(mainApp, "Race laps")
         ac.setRange(raceLapsSpinner, 0, 100)
         ac.setValue(raceLapsSpinner, raceLaps)
@@ -312,9 +312,9 @@ def updateUIVisibility():
         ac.setVisible(averageFuelPerLapText, True)
         ac.setVisible(extraLitersText, True)
         ac.setVisible(timedRaceText, True)
-        ac.setVisible(extraLitersMinButton, True)
-        ac.setVisible(extraLitersPlusButton, True)
-        ac.setVisible(resetButton, True)
+        ac.setVisible(extraLitersMinButton, currentSessionType != 2)
+        ac.setVisible(extraLitersPlusButton, currentSessionType != 2)
+        ac.setVisible(resetButton, currentSessionType != 2)
         ac.setVisible(timedRaceCheckbox, True)
         ac.setVisible(extraLitersValue, True)
         ac.setVisible(averageFuelPerLapValue, True)
@@ -324,18 +324,18 @@ def updateUIVisibility():
         ac.setVisible(fuelLapsCountedValue, True)
         ac.setVisible(calcTypeText, True)
         ac.setVisible(calcTypeCurrentButton, True)
-        ac.setVisible(calcTypeMultipleButton, True)
-        ac.setVisible(calcTypeStoredButton, True)
-        ac.setVisible(raceTotalLapsText, isTimedRace)
-        ac.setVisible(raceTotalLapsValue, isTimedRace)
-        ac.setVisible(averageLapTimeText, isTimedRace)
-        ac.setVisible(averageLapTimeValue, isTimedRace)
-        ac.setVisible(bestLapTimeText, isTimedRace)
-        ac.setVisible(bestLapTimeValue, isTimedRace)
-        ac.setVisible(timedRaceMinutesSpinner, isTimedRace)
-        ac.setVisible(timedRaceMinLapButton, isTimedRace)
-        ac.setVisible(timedRacePlusLapButton, isTimedRace)
-        ac.setVisible(raceLapsSpinner, not isTimedRace)
+        ac.setVisible(calcTypeMultipleButton, currentSessionType != 2)
+        ac.setVisible(calcTypeStoredButton, currentSessionType != 2)
+        ac.setVisible(raceTotalLapsText, True)
+        ac.setVisible(raceTotalLapsValue, True)
+        ac.setVisible(averageLapTimeText, True)
+        ac.setVisible(averageLapTimeValue, True)
+        ac.setVisible(bestLapTimeText, True)
+        ac.setVisible(bestLapTimeValue, True)
+        ac.setVisible(timedRaceMinutesSpinner, (isTimedRace and currentSessionType != 2))
+        ac.setVisible(timedRaceMinLapButton, (isTimedRace and currentSessionType != 2))
+        ac.setVisible(timedRacePlusLapButton, (isTimedRace and currentSessionType != 2))
+        ac.setVisible(raceLapsSpinner, (not isTimedRace and currentSessionType != 2))
 
     updateFuelEstimate()
 
@@ -459,12 +459,18 @@ def initNewSession(session):
         else:
             shownCalcData = multipleSessionsCalcData
 
+    if currentSessionType == 2:
+        shownCalcData = currentSessionCalcData
+
+    updateUIVisibility()
     updateCalcTypeUI()
     updateFuelEstimate()
 
 def updateFuelEstimate():
     global averageFuelPerLap, timedRaceMinutes, extraLiters, timedRaceExtraLaps, isTimedRace, raceLaps, fuelRemaining, currentSessionType, sessionStartTime, raceTotalSessionTime
     global averageFuelPerLapValue, raceFuelNeededValue, raceTotalLapsValue, extraLitersValue, raceTypeValue, fuelLapsCountedText, fuelLapsCountedValue, completedLapsValue, shownCalcData, averageLapTimeValue, raceCrossedStartLine
+
+    # TODO: Only update if we are live (AC_LIVE)
 
     calcData = shownCalcData
 
