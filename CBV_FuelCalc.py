@@ -67,6 +67,7 @@ tableCurrentLaps = None
 tableRaceFuel = None
 tableRaceTime = None
 tableRaceLaps = None
+tableRowRace = None
 
 # fuel
 
@@ -172,7 +173,7 @@ def createUI():
     global uiCreated, x_app_size, y_app_size, defaultFontSize
     global isTimedRace, timedRaceCheckbox, averageFuelPerLapValue, raceTotalLapsText, raceTotalLapsValue, bestLapTimeText, bestLapTimeValue, timedRaceMinutesSpinner, raceLapsSpinner, resetButton, timedRacePlusLapButton, timedRaceMinLapButton
     global extraLiters, extraLitersMinButton, extraLitersPlusButton, extraLitersValue, averageFuelPerLapText, extraLitersText, timedRaceText, toggleAppSizeButton, fuelLapsCountedText, fuelLapsCountedValue, calcTypeText, calcTypeCurrentButton, calcTypeMultipleButton, calcTypeStoredButton, completedLapsText, completedLapsValue, averageLapTimeText, averageLapTimeValue
-    global tableCurrentFuel, tableCurrentTime, tableCurrentLaps, tableRaceFuel, tableRaceTime, tableRaceLaps
+    global tableCurrentFuel, tableCurrentTime, tableCurrentLaps, tableRaceFuel, tableRaceTime, tableRaceLaps, tableRowRace
 
     try:
         row = 0
@@ -191,7 +192,7 @@ def createUI():
         tableCurrentLaps = createLabel("tableCurrentLaps", "--", ((x_app_size)/5) * 4, row * y_offset, defaultFontSize+2, "center")
 
         row += 1
-        createLabel("tableRowRace", "Race", x_offset, row * y_offset, defaultFontSize, "left")
+        tableRowRace = createLabel("tableRowRace", "Total Race", x_offset, row * y_offset, defaultFontSize, "left")
 
         tableRaceFuel = createLabel("tableRaceFuel", "--", ((x_app_size)/5) * 2, row * y_offset, defaultFontSize+2, "center")
         tableRaceTime = createLabel("tableRaceTime", "--", ((x_app_size)/5) * 3, row * y_offset, defaultFontSize+2, "center")
@@ -456,7 +457,7 @@ def acUpdate(deltaT):
         showMessage("Error: " + traceback.format_exc())
 
 def initNewSession(session):
-    global sessionChangedDetections, currentSessionType, sessionStartTime, completedLaps, shownCalcData, currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, raceTotalSessionTime, raceCrossedStartLine
+    global sessionChangedDetections, currentSessionType, sessionStartTime, completedLaps, shownCalcData, currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, raceTotalSessionTime, raceCrossedStartLine, tableRowRace
 
     currentSessionType = session
     sessionStartTime = time.time()
@@ -484,6 +485,9 @@ def initNewSession(session):
 
     if currentSessionType == 2:
         shownCalcData = currentSessionCalcData
+        ac.setText(tableRowRace, "End of Race")
+    else:
+        ac.setText(tableRowRace, "Total Race")
 
     updateUIVisibility()
     updateCalcTypeUI()
@@ -535,7 +539,7 @@ def updateFuelEstimate():
         timeRemainingSeconds = (timeRemaining / 1000) % 60
         timeRemainingMinutes = (timeRemaining // 1000) // 60
 
-        ac.setText(tableCurrentTime, "%.0f" % (timeRemainingMinutes))
+        ac.setText(tableCurrentTime, "%.0f m" % (timeRemainingMinutes))
 
         lapsRemaining = fuelRemaining / calcData.averageFuelUsed()
 
@@ -549,16 +553,16 @@ def updateFuelEstimate():
             if raceCrossedStartLine:
                 lapCount = currentLap + lapPosition
 
-            lapRemaining = expectedNumberOfLaps - lapCount
-            fuelEndOfRace = fuelRemaining - (lapRemaining * calcData.averageFuelUsed())
+            raceLapsRemaining = expectedNumberOfLaps - lapCount
+            fuelEndOfRace = fuelRemaining - (raceLapsRemaining * calcData.averageFuelUsed())
 
-            ac.setText(tableRaceFuel, "%d" % (fuelEndOfRace))
-            ac.setText(tableRaceLaps, "%.1f" % (lapRemaining))
+            ac.setText(tableRaceFuel, "%.1f" % (fuelEndOfRace))
+            ac.setText(tableRaceLaps, "%.1f" % (lapsRemaining - raceLapsRemaining))
             if sm.static.isTimedRace == 1:
-                ac.setText(tableRaceTime, "%.0f" % ((sm.graphics.sessionTimeLeft // 1000) // 60))
+                ac.setText(tableRaceTime, "%.0f m" % (((timeRemaining - sm.graphics.sessionTimeLeft) // 1000) // 60))
             else:
-                timeRemaining = lapRemaining * calcData.averageLapTime();
-                ac.setText(tableRaceTime, "%.0f" % ((timeRemaining // 1000) // 60))
+                raceTimeRemaining = raceLapsRemaining * calcData.averageLapTime();
+                ac.setText(tableRaceTime, "%.0f m" % (((timeRemaining - raceTimeRemaining) // 1000) // 60))
         else:
             ac.setText(tableRaceFuel, "%d" % (fuelNeeded))
             if isTimedRace:
@@ -566,7 +570,7 @@ def updateFuelEstimate():
             else:
                 estimatedRaceTime = raceLaps * calcData.averageLapTime()
                 estimatedRaceMinutes = (estimatedRaceTime // 1000) // 60
-                ac.setText(tableRaceTime, "%.0f" % (estimatedRaceMinutes))
+                ac.setText(tableRaceTime, "%.0f m" % (estimatedRaceMinutes))
 
             ac.setText(tableRaceLaps, "%d" % (math.ceil(laps)))
 
