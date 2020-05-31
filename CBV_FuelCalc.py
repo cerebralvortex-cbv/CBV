@@ -259,7 +259,7 @@ def createUI():
 
         row = raceTypeRow
 
-        row += 4
+        row += 5
         raceLapsSpinner = ac.addSpinner(mainApp, "Race laps")
         ac.setRange(raceLapsSpinner, 0, 100)
         ac.setValue(raceLapsSpinner, raceLaps)
@@ -579,7 +579,7 @@ def getExpectedRaceLaps():
                         # debug("Session time elapsed is : %d" % (sessionTimeElapsed))
                         lapCount = ac.getCarState(carId, acsys.CS.LapCount) + ac.getCarState(carId, acsys.CS.NormalizedSplinePosition)
                         # debug("Lap count is : " + str(lapCount))
-                        estimatedLaps = (raceTotalSessionTime / sessionTimeElapsed) * lapCount
+                        estimatedLaps = ((raceTotalSessionTime - 10) / sessionTimeElapsed) * lapCount # 10 seconds to account for standing start
                         # debug("Estimated number of laps : " + str(estimatedLaps))
                         return math.ceil(estimatedLaps)
                     else:
