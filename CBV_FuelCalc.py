@@ -541,21 +541,24 @@ def updateFuelEstimate():
 
         ac.setText(tableCurrentLaps, "%.1f" % (lapsRemaining))
 
-        if currentSessionType == 2:
-            if expectedNumberOfLaps != -1:
-                currentLap = ac.getCarState(0, acsys.CS.LapCount)
-                lapPosition = ac.getCarState(0, acsys.CS.NormalizedSplinePosition)
+        if currentSessionType == 2 and expectedNumberOfLaps != -1:
+            currentLap = ac.getCarState(0, acsys.CS.LapCount)
+            lapPosition = ac.getCarState(0, acsys.CS.NormalizedSplinePosition)
 
-                lapCount = currentLap
-                if raceCrossedStartLine:
-                    lapCount = currentLap + lapPosition
+            lapCount = currentLap
+            if raceCrossedStartLine:
+                lapCount = currentLap + lapPosition
 
-                lapRemaining = expectedNumberOfLaps - lapCount
-                fuelEndOfRace = fuelRemaining - (lapRemaining * calcData.averageFuelUsed())
+            lapRemaining = expectedNumberOfLaps - lapCount
+            fuelEndOfRace = fuelRemaining - (lapRemaining * calcData.averageFuelUsed())
 
-                ac.setText(tableRaceFuel, "%d" % (fuelEndOfRace))
-                ac.setText(tableRaceTime, "%d" % ((sm.graphics.sessionTimeLeft / 1000) / 60))
-                ac.setText(tableRaceLaps, "%.1f" % (lapsRemaining))
+            ac.setText(tableRaceFuel, "%d" % (fuelEndOfRace))
+            ac.setText(tableRaceLaps, "%.1f" % (lapRemaining))
+            if sm.static.isTimedRace == 1:
+                ac.setText(tableRaceTime, "%.0f" % ((sm.graphics.sessionTimeLeft // 1000) // 60))
+            else:
+                timeRemaining = lapRemaining * calcData.averageLapTime();
+                ac.setText(tableRaceTime, "%.0f" % ((timeRemaining // 1000) // 60))
         else:
             ac.setText(tableRaceFuel, "%d" % (fuelNeeded))
             if isTimedRace:
@@ -575,20 +578,11 @@ def updateFuelEstimate():
         bestLapValueMinutes = (calcData.bestLapTime // 1000) // 60
         ac.setText(bestLapTimeValue,  "{:.0f}:{:06.3f}".format(bestLapValueMinutes, bestLapValueSeconds)[:-1])
     else:
-        timedRace = isTimedRace
-        if currentSessionType == 2:
-            timedRace = sm.static.isTimedRace == 1
-
-        if timedRace:
-            ac.setText(tableRaceLaps, "--")
-            ac.setText(tableRaceTime, "%d" % (timedRaceMinutes))
-        else:
-            ac.setText(tableRaceLaps, "%d" % (raceLaps))
-            ac.setText(tableRaceTime, "--")
-
         ac.setText(tableCurrentTime, "--")
         ac.setText(tableCurrentLaps, "--")
         ac.setText(tableRaceFuel, "--")
+        ac.setText(tableRaceTime, "--")
+        ac.setText(tableRaceLaps, "--")
         ac.setText(averageFuelPerLapValue, "--")
         ac.setText(raceTotalLapsValue, "--")
         ac.setText(averageLapTimeValue,  "--")
