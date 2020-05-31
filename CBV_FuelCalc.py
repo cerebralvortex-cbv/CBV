@@ -28,9 +28,9 @@ appName = "CBV_FuelCalc"
 mainApp = 0
 mainAppIsActive = False
 x_app_size = 300
-y_app_size = 380
+y_app_size = 400
 x_app_min_size = 300
-y_app_min_size = 50
+y_app_min_size = 70
 defaultFontSize = 14
 customFontName = "Digital-7 Mono"
 backgroundOpacity = 0.50
@@ -62,6 +62,12 @@ calcTypeText = None
 calcTypeCurrentButton = None
 calcTypeMultipleButton = None
 calcTypeStoredButton = None
+tableCurrentFuel = None
+tableCurrentTime = None
+tableCurrentLaps = None
+tableRaceFuel = None
+tableRaceTime = None
+tableRaceLaps = None
 
 # fuel
 
@@ -167,16 +173,31 @@ def createUI():
     global x_app_size, y_app_size, defaultFontSize
     global isTimedRace, timedRaceCheckbox, averageFuelPerLapValue, raceFuelNeededValue, raceTotalLapsText, raceTotalLapsValue, bestLapTimeText, bestLapTimeValue, timedRaceMinutesSpinner, raceLapsSpinner, resetButton, timedRacePlusLapButton, timedRaceMinLapButton
     global extraLiters, extraLitersMinButton, extraLitersPlusButton, extraLitersValue, raceTypeValue, averageFuelPerLapText, extraLitersText, timedRaceText, toggleAppSizeButton, fuelLapsCountedText, fuelLapsCountedValue, calcTypeText, calcTypeCurrentButton, calcTypeMultipleButton, calcTypeStoredButton, completedLapsText, completedLapsValue, averageLapTimeText, averageLapTimeValue
+    global tableCurrentFuel, tableCurrentTime, tableCurrentLaps, tableRaceFuel, tableRaceTime, tableRaceLaps
 
     try:
         row = 0
         x_offset = 5
         y_offset = 20
 
-#        createLabel("raceFuelNeededText", "Race fuel needed : ", x_offset, row * y_offset, defaultFontSize, "left")
-        raceFuelNeededValue = createLabel("raceFuelNeededValue", "Race fuel needed : --", x_app_size / 2, row * y_offset, defaultFontSize + 4, "center")
+        createLabel("tableHeaderFuel", "Fuel", ((x_app_size)/5) * 2, row * y_offset, defaultFontSize, "center")
+        createLabel("tableHeaderTime", "Time", ((x_app_size)/5) * 3, row * y_offset, defaultFontSize, "center")
+        createLabel("tableHeaderLaps", "Laps", ((x_app_size)/5) * 4, row * y_offset, defaultFontSize, "center")
+
         row += 1
-        raceTypeValue = createLabel("raceTypeValue", "", x_app_size / 2, row * y_offset, defaultFontSize, "center")
+        createLabel("tableRowCurrent", "Current", x_offset, row * y_offset, defaultFontSize, "left")
+
+        tableCurrentFuel = createLabel("tableCurrentFuel", "--", ((x_app_size)/5) * 2, row * y_offset, defaultFontSize+2, "center")
+        tableCurrentTime = createLabel("tableCurrentTime", "--", ((x_app_size)/5) * 3, row * y_offset, defaultFontSize+2, "center")
+        tableCurrentLaps = createLabel("tableCurrentLaps", "--", ((x_app_size)/5) * 4, row * y_offset, defaultFontSize+2, "center")
+
+        row += 1
+        createLabel("tableRowRace", "Race", x_offset, row * y_offset, defaultFontSize, "left")
+
+        tableRaceFuel = createLabel("tableRaceFuel", "--", ((x_app_size)/5) * 2, row * y_offset, defaultFontSize+2, "center")
+        tableRaceTime = createLabel("tableRaceTime", "--", ((x_app_size)/5) * 3, row * y_offset, defaultFontSize+2, "center")
+        tableRaceLaps = createLabel("tableRaceLaps", "--", ((x_app_size)/5) * 4, row * y_offset, defaultFontSize+2, "center")
+
         toggleAppSizeButton = ac.addButton(mainApp, "+")
         ac.setPosition(toggleAppSizeButton, x_app_size - 20 - x_offset, (row * y_offset) + 5)
         ac.setSize(toggleAppSizeButton, 20, 20)
@@ -409,7 +430,7 @@ def acUpdate(deltaT):
                 debug("Crossed start line, lap position = %.1f ; sector = %d" % (lapPosition, currentSectorIndex))
                 raceCrossedStartLine = True
 
-            updateFuelEstimate()
+        updateFuelEstimate()
 
         if currentLap != completedLaps: #when crossed finish line
             # debug("Current Lap %d, completedLaps %d, fuelAtLapStart = %.1f, remaining = %.1f" % (currentLap, completedLaps, fuelAtLapStart, remaining))
@@ -469,6 +490,7 @@ def initNewSession(session):
 def updateFuelEstimate():
     global averageFuelPerLap, timedRaceMinutes, extraLiters, timedRaceExtraLaps, isTimedRace, raceLaps, fuelRemaining, currentSessionType, sessionStartTime, raceTotalSessionTime
     global averageFuelPerLapValue, raceFuelNeededValue, raceTotalLapsValue, extraLitersValue, raceTypeValue, fuelLapsCountedText, fuelLapsCountedValue, completedLapsValue, shownCalcData, averageLapTimeValue, raceCrossedStartLine
+    global tableCurrentFuel, tableCurrentTime, tableCurrentLaps, tableRaceFuel, tableRaceTime, tableRaceLaps
 
     # TODO: Only update if we are live (AC_LIVE)
 
@@ -484,6 +506,7 @@ def updateFuelEstimate():
         else:
             ac.setText(raceTypeValue, "for a %d lap race" % (raceLaps))
 
+    ac.setText(tableCurrentFuel, "%.1f" % (fuelRemaining))
     ac.setText(extraLitersValue, str(extraLiters))
 
     if calcData != None and calcData.hasData() and calcData.averageFuelUsed() != 0.0 and calcData.bestLapTime != -1:
@@ -493,6 +516,8 @@ def updateFuelEstimate():
             laps = (raceTime / calcData.bestLapTime) + timedRaceExtraLaps
         else:
             laps = raceLaps
+
+        # debug("laps = %.1f ; extraLiters = %d" % (laps, extraLiters))
 
         fuelNeeded = math.ceil(math.ceil(laps) * calcData.averageFuelUsed()) + extraLiters
 
@@ -508,28 +533,44 @@ def updateFuelEstimate():
         else:
             ac.setText(raceTotalLapsValue, "%.1f" % (laps))
 
-        if currentSessionType == 2 and expectedNumberOfLaps != -1:
-            if sm.static.isTimedRace == 1:
-                timeRemaining = (fuelRemaining / calcData.averageFuelUsed()) * calcData.averageLapTime();
-                timeRemainingSeconds = (timeRemaining / 1000) % 60
-                timeRemainingMinutes = (timeRemaining // 1000) // 60
-                ac.setText(raceTypeValue, "Remaining : %.1f liter, %.0f mins" % (fuelRemaining, timeRemainingMinutes))
-            else:
-                lapsRemaining = fuelRemaining / calcData.averageFuelUsed()
-                ac.setText(raceTypeValue, "Remaining : %.1f liter, %d laps" % (fuelRemaining, lapsRemaining))
+        timeRemaining = (fuelRemaining / calcData.averageFuelUsed()) * calcData.averageLapTime();
+        timeRemainingSeconds = (timeRemaining / 1000) % 60
+        timeRemainingMinutes = (timeRemaining // 1000) // 60
+        #ac.setText(raceTypeValue, "Remaining : %.1f liter, %.0f mins" % (fuelRemaining, timeRemainingMinutes))
 
-            currentLap = ac.getCarState(0, acsys.CS.LapCount)
-            lapPosition = ac.getCarState(0, acsys.CS.NormalizedSplinePosition)
+        ac.setText(tableCurrentTime, "%.0f" % (timeRemainingMinutes))
 
-            lapCount = currentLap
-            if raceCrossedStartLine:
-                lapCount = currentLap + lapPosition
+        lapsRemaining = fuelRemaining / calcData.averageFuelUsed()
+        #ac.setText(raceTypeValue, "Remaining : %.1f liter, %d laps" % (fuelRemaining, lapsRemaining))
 
-            lapRemaining = expectedNumberOfLaps - lapCount
-            fuelEndOfRace = fuelRemaining - (lapRemaining * calcData.averageFuelUsed())
-            ac.setText(raceFuelNeededValue, "Fuel end of race : %d (%.1f) (%.1f)" % (fuelEndOfRace, lapRemaining, lapCount))
+        ac.setText(tableCurrentLaps, "%d" % (lapsRemaining))
+
+        if currentSessionType == 2:
+            if expectedNumberOfLaps != -1:
+                currentLap = ac.getCarState(0, acsys.CS.LapCount)
+                lapPosition = ac.getCarState(0, acsys.CS.NormalizedSplinePosition)
+
+                lapCount = currentLap
+                if raceCrossedStartLine:
+                    lapCount = currentLap + lapPosition
+
+                lapRemaining = expectedNumberOfLaps - lapCount
+                fuelEndOfRace = fuelRemaining - (lapRemaining * calcData.averageFuelUsed())
+                # ac.setText(raceFuelNeededValue, "Fuel end of race : %d (%.1f) (%.1f)" % (fuelEndOfRace, lapRemaining, lapCount))
+
+                ac.setText(tableRaceFuel, "%d" % (fuelEndOfRace))
+                ac.setText(tableRaceTime, "%.0f" % (sessionTimeLeft / 60))
+                ac.setText(tableRaceLaps, "%.1f" % (lapsRemaining))
         else:
-            ac.setText(raceFuelNeededValue, "Race fuel needed : %d" % (fuelNeeded))
+            ac.setText(tableRaceFuel, "%d" % (fuelNeeded))
+            if isTimedRace:
+                ac.setText(tableRaceTime, "%d" % (timedRaceMinutes))
+            else:
+                estimatedRaceTime = raceLaps * calcData.averageLapTime()
+                estimatedRaceMinutes = (estimatedRaceTime // 1000) // 60
+                ac.setText(tableRaceTime, "%.0f" % (estimatedRaceMinutes))
+
+            ac.setText(tableRaceLaps, "%d" % (laps))
 
         averageLapTime = calcData.averageLapTime()
         averageLapValueSeconds = (averageLapTime / 1000) % 60
@@ -539,13 +580,15 @@ def updateFuelEstimate():
         bestLapValueMinutes = (calcData.bestLapTime // 1000) // 60
         ac.setText(bestLapTimeValue,  "{:.0f}:{:06.3f}".format(bestLapValueMinutes, bestLapValueSeconds)[:-1])
     else:
-        if currentSessionType == 2:
-            if sm.static.isTimedRace == 1:
-                ac.setText(raceFuelNeededValue, "Remaining : %.1f liter, -- mins" % (fuelRemaining))
-            else:
-                ac.setText(raceFuelNeededValue, "Remaining : %.1f liter, -- laps" % (fuelRemaining))
+        if sm.static.isTimedRace == 1:
+            ac.setText(tableRaceLaps, "--")
+            # ac.setText(raceFuelNeededValue, "Remaining : %.1f liter, -- mins" % (fuelRemaining))
         else:
-            ac.setText(raceFuelNeededValue, "Race fuel needed : --")
+            ac.setText(tableRaceTime, "--")
+            # ac.setText(raceFuelNeededValue, "Remaining : %.1f liter, -- laps" % (fuelRemaining))
+        ac.setText(tableCurrentTime, "--")
+        ac.setText(tableCurrentLaps, "--")
+        ac.setText(tableRaceFuel, "--")
         ac.setText(averageFuelPerLapValue, "--")
         ac.setText(raceTotalLapsValue, "--")
         ac.setText(averageLapTimeValue,  "--")
