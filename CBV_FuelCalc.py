@@ -3,6 +3,7 @@ version = "1.0"
 import ac, acsys, platform, os, sys, time, re, configparser, traceback, random, math
 from module.debug import debug
 from module.data import FuelCalcData
+from module.car import CarData
 
 try:
     if platform.architecture()[0] == "64bit":
@@ -426,7 +427,7 @@ def acUpdate(deltaT):
 
                 if not isCountDown:
                     raceTotalSessionTime = sm.graphics.sessionTimeLeft / 1000
-                    debug("Green green green - Race session time %d" % (raceTotalSessionTime))
+                    debug("Green green green - Race session time : %d" % (raceTotalSessionTime))
 
             if raceTotalSessionTime != -1 and not raceCrossedStartLine and currentSectorIndex == 0 and lapPosition < 0.1:
                 debug("Crossed start line, lap position = %.1f ; sector = %d" % (lapPosition, currentSectorIndex))
@@ -440,7 +441,7 @@ def acUpdate(deltaT):
 
             if not currentLapReset and not wasInPit and currentLap >= 2 and fuelAtLapStart > remaining: #if more than 2 laps driven
                 lastLapTime = sm.graphics.iLastTime
-                fuelLastLap = fuelAtLapStart - remaining # calculate fuel used last lap
+                fuelLastLap = (fuelAtLapStart - remaining) / sm.static.aidFuelRate # calculate fuel used last lap
 
                 currentSessionCalcData.updateCalcData(fuelLastLap, lastLapTime, percentOfBestLapTime)
                 multipleSessionsCalcData.updateCalcData(fuelLastLap, lastLapTime, percentOfBestLapTime)
@@ -503,130 +504,154 @@ def updateFuelEstimate():
 
     # TODO: Only update if we are live (AC_LIVE)
 
-    calcData = shownCalcData
+    try:
+        calcData = shownCalcData
 
-    expectedNumberOfLaps = -1
+        expectedNumberOfLaps = -1
 
-    if currentSessionType == 2:
-        expectedNumberOfLaps = getExpectedRaceLaps()
-
-    ac.setText(tableCurrentFuel, "%.1f" % (fuelRemaining))
-    ac.setText(extraLitersValue, str(extraLiters))
-
-    if calcData != None and calcData.hasData() and calcData.averageFuelUsed() != 0.0 and calcData.bestLapTime != -1:
-        raceTime = timedRaceMinutes * 60 * 1000
-
-        if isTimedRace:
-            laps = (raceTime / calcData.bestLapTime) + timedRaceExtraLaps
-        else:
-            laps = raceLaps
-
-        fuelNeeded = math.ceil(math.ceil(laps) * calcData.averageFuelUsed()) + extraLiters
-
-        ac.setText(averageFuelPerLapValue, "%.3f" % (calcData.averageFuelUsed()))
-        ac.setText(completedLapsValue, "%d" % (calcData.completedLaps))
-        ac.setText(fuelLapsCountedValue, "%d" % (calcData.fuelLapsCounted))
-
-        if timedRaceExtraLaps != 0:
-            if timedRaceExtraLaps > 0:
-                ac.setText(raceTotalLapsValue, "%.1f (+%d)" % (laps, timedRaceExtraLaps))
-            else:
-                ac.setText(raceTotalLapsValue, "%.1f (%d)" % (laps, timedRaceExtraLaps))
-        else:
-            ac.setText(raceTotalLapsValue, "%.1f" % (laps))
-
-        timeRemaining = (fuelRemaining / calcData.averageFuelUsed()) * calcData.averageLapTime();
-        timeRemainingSeconds = (timeRemaining / 1000) % 60
-        timeRemainingMinutes = (timeRemaining // 1000) // 60
-
-        ac.setText(tableCurrentTime, "%.0f m" % (timeRemainingMinutes))
-
-        lapsRemaining = fuelRemaining / calcData.averageFuelUsed()
-
-        ac.setText(tableCurrentLaps, "%.1f" % (lapsRemaining))
-
-        if currentSessionType == 2 and expectedNumberOfLaps != -1:
+        if currentSessionType == 2:
             currentLap = ac.getCarState(0, acsys.CS.LapCount)
             lapPosition = ac.getCarState(0, acsys.CS.NormalizedSplinePosition)
 
-            lapCount = currentLap
-            if raceCrossedStartLine:
-                lapCount = currentLap + lapPosition
+            leaderCarId = getLeaderCarId()
+            if leaderCarId != -1:
+                leaderCurrentLap = ac.getCarState(leaderCarId, acsys.CS.LapCount)
+                leaderLapPosition = ac.getCarState(leaderCarId, acsys.CS.NormalizedSplinePosition)
 
-            raceLapsRemaining = expectedNumberOfLaps - lapCount
-            fuelEndOfRace = fuelRemaining - (raceLapsRemaining * calcData.averageFuelUsed())
+                expectedNumberOfLaps = getExpectedRaceLaps(leaderCurrentLap, leaderLapPosition, currentLap, lapPosition)
 
-            ac.setText(tableRaceFuel, "%.1f" % (fuelEndOfRace))
-            ac.setText(tableRaceLaps, "%.1f" % (lapsRemaining - raceLapsRemaining))
-            if sm.static.isTimedRace == 1:
-                ac.setText(tableRaceTime, "%.0f m" % (((timeRemaining - sm.graphics.sessionTimeLeft) // 1000) // 60))
-            else:
-                raceTimeRemaining = raceLapsRemaining * calcData.averageLapTime();
-                ac.setText(tableRaceTime, "%.0f m" % (((timeRemaining - raceTimeRemaining) // 1000) // 60))
-        else:
-            ac.setText(tableRaceFuel, "%d" % (fuelNeeded))
+        ac.setText(tableCurrentFuel, "%.1f" % (fuelRemaining))
+        ac.setText(extraLitersValue, str(extraLiters))
+
+        if calcData != None and calcData.hasData() and calcData.averageFuelUsed() != 0.0 and calcData.bestLapTime != -1:
+            raceTime = timedRaceMinutes * 60 * 1000
+
+            avgFuelUsed = calcData.averageFuelUsed() * sm.static.aidFuelRate
+
             if isTimedRace:
-                ac.setText(tableRaceTime, "%d" % (timedRaceMinutes))
+                laps = (raceTime / calcData.bestLapTime) + timedRaceExtraLaps
             else:
-                estimatedRaceTime = raceLaps * calcData.averageLapTime()
-                estimatedRaceMinutes = (estimatedRaceTime // 1000) // 60
-                ac.setText(tableRaceTime, "%.0f m" % (estimatedRaceMinutes))
+                laps = raceLaps
 
-            ac.setText(tableRaceLaps, "%d" % (math.ceil(laps)))
+            fuelNeeded = math.ceil(math.ceil(laps) * avgFuelUsed) + extraLiters
 
-        averageLapTime = calcData.averageLapTime()
-        averageLapValueSeconds = (averageLapTime / 1000) % 60
-        averageLapValueMinutes = (averageLapTime // 1000) // 60
-        ac.setText(averageLapTimeValue,  "{:.0f}:{:06.3f}".format(averageLapValueMinutes, averageLapValueSeconds)[:-1])
-        bestLapValueSeconds = (calcData.bestLapTime / 1000) % 60
-        bestLapValueMinutes = (calcData.bestLapTime // 1000) // 60
-        ac.setText(bestLapTimeValue,  "{:.0f}:{:06.3f}".format(bestLapValueMinutes, bestLapValueSeconds)[:-1])
-    else:
-        ac.setText(tableCurrentTime, "--")
-        ac.setText(tableCurrentLaps, "--")
-        ac.setText(tableRaceFuel, "--")
-        ac.setText(tableRaceTime, "--")
-        ac.setText(tableRaceLaps, "--")
-        ac.setText(averageFuelPerLapValue, "--")
-        ac.setText(raceTotalLapsValue, "--")
-        ac.setText(averageLapTimeValue,  "--")
-        ac.setText(bestLapTimeValue,  "--")
-        ac.setText(completedLapsValue, "--")
-        ac.setText(fuelLapsCountedValue, "--")
+            ac.setText(averageFuelPerLapValue, "%.3f" % (avgFuelUsed))
+            ac.setText(completedLapsValue, "%d" % (calcData.completedLaps))
+            ac.setText(fuelLapsCountedValue, "%d" % (calcData.fuelLapsCounted))
 
-def getExpectedRaceLaps():
+            if timedRaceExtraLaps != 0:
+                if timedRaceExtraLaps > 0:
+                    ac.setText(raceTotalLapsValue, "%.1f (+%d)" % (laps, timedRaceExtraLaps))
+                else:
+                    ac.setText(raceTotalLapsValue, "%.1f (%d)" % (laps, timedRaceExtraLaps))
+            else:
+                ac.setText(raceTotalLapsValue, "%.1f" % (laps))
+
+            timeRemaining = (fuelRemaining / avgFuelUsed) * calcData.averageLapTime();
+            timeRemainingSeconds = (timeRemaining / 1000) % 60
+            timeRemainingMinutes = (timeRemaining // 1000) // 60
+
+            ac.setText(tableCurrentTime, "%.0f m" % (timeRemainingMinutes))
+
+            lapsRemaining = fuelRemaining / avgFuelUsed
+
+            ac.setText(tableCurrentLaps, "%.1f" % (lapsRemaining))
+
+            if currentSessionType == 2 and expectedNumberOfLaps != -1:
+                #currentLap = playerData.currentLap()
+                #lapPosition = playerData.lapPosition()
+
+                lapCount = currentLap
+                if raceCrossedStartLine:
+                    lapCount = currentLap + lapPosition
+
+                raceLapsRemaining = expectedNumberOfLaps - lapCount
+                fuelEndOfRace = fuelRemaining - (raceLapsRemaining * avgFuelUsed)
+
+                ac.setText(tableRaceFuel, "%.1f" % (fuelEndOfRace))
+                ac.setText(tableRaceLaps, "%.1f" % (lapsRemaining - raceLapsRemaining))
+                if sm.static.isTimedRace == 1:
+                    ac.setText(tableRaceTime, "%.0f m" % (((timeRemaining - sm.graphics.sessionTimeLeft) // 1000) // 60))
+                else:
+                    raceTimeRemaining = raceLapsRemaining * calcData.averageLapTime();
+                    ac.setText(tableRaceTime, "%.0f m" % (((timeRemaining - raceTimeRemaining) // 1000) // 60))
+            else:
+                ac.setText(tableRaceFuel, "%d" % (fuelNeeded))
+                if isTimedRace:
+                    ac.setText(tableRaceTime, "%d m" % (timedRaceMinutes))
+                else:
+                    estimatedRaceTime = raceLaps * calcData.averageLapTime()
+                    estimatedRaceMinutes = (estimatedRaceTime // 1000) // 60
+                    ac.setText(tableRaceTime, "%.0f m" % (estimatedRaceMinutes))
+
+                ac.setText(tableRaceLaps, "%d" % (math.ceil(laps)))
+
+            averageLapTime = calcData.averageLapTime()
+            averageLapValueSeconds = (averageLapTime / 1000) % 60
+            averageLapValueMinutes = (averageLapTime // 1000) // 60
+            ac.setText(averageLapTimeValue,  "{:.0f}:{:06.3f}".format(averageLapValueMinutes, averageLapValueSeconds)[:-1])
+            bestLapValueSeconds = (calcData.bestLapTime / 1000) % 60
+            bestLapValueMinutes = (calcData.bestLapTime // 1000) // 60
+            ac.setText(bestLapTimeValue,  "{:.0f}:{:06.3f}".format(bestLapValueMinutes, bestLapValueSeconds)[:-1])
+        else:
+            ac.setText(tableCurrentTime, "--")
+            ac.setText(tableCurrentLaps, "--")
+            ac.setText(tableRaceFuel, "--")
+            ac.setText(tableRaceTime, "--")
+            ac.setText(tableRaceLaps, "--")
+            ac.setText(averageFuelPerLapValue, "--")
+            ac.setText(raceTotalLapsValue, "--")
+            ac.setText(averageLapTimeValue,  "--")
+            ac.setText(bestLapTimeValue,  "--")
+            ac.setText(completedLapsValue, "--")
+            ac.setText(fuelLapsCountedValue, "--")
+
+    except exception:
+        debug("Error while updating fuel estimates : " + traceback.format_exc())
+        return False
+
+def getLeaderCarId():
+    global raceTotalSessionTime, raceCrossedStartLine
+
+    if raceTotalSessionTime != -1 and raceCrossedStartLine:
+        numberOfCars = ac.getCarsCount()
+        carIds = range(0, ac.getCarsCount(), 1)
+        for carId in carIds:
+            if str(ac.getCarName(carId)) == '-1':
+                break
+            else:
+                carPosition = ac.getCarRealTimeLeaderboardPosition(carId)
+                if carPosition == 0:
+                    return carId
+
+    return -1
+
+def getExpectedRaceLaps(leaderCurrentLap, leaderLapPosition, playerCurrentLap, playerLapPosition):
     global raceTotalSessionTime, raceCrossedStartLine
 
     extraLap = 0
     if sm.static.hasExtraLap:
         extraLap = 1
 
-    if sm.static.isTimedRace != 1:
-        return sm.graphics.numberOfLaps + extraLap
-    else:
-        if raceTotalSessionTime != -1 and raceCrossedStartLine:
-            numberOfCars = ac.getCarsCount()
-            carIds = range(0, ac.getCarsCount(), 1)
-            for carId in carIds:
-                # debug("Getting car with ID : " + str(carId) + " ; driver name = " + str(ac.getDriverName(carId)))
-                if str(ac.getCarName(carId)) == '-1':
-                    # debug("Car name for ID is -1 - break : " + str(carId))
-                    break
-                else:
-                    carPosition = ac.getCarRealTimeLeaderboardPosition(carId)
-                    # debug("Car position = " + str(carPosition))
-                    if carPosition == 0:
-                        sessionTimeElapsed = raceTotalSessionTime - (sm.graphics.sessionTimeLeft / 1000)
-                        # debug("Session time elapsed is : %d" % (sessionTimeElapsed))
-                        lapCount = ac.getCarState(carId, acsys.CS.LapCount) + ac.getCarState(carId, acsys.CS.NormalizedSplinePosition)
-                        # debug("Lap count is : " + str(lapCount))
-                        estimatedLaps = ((raceTotalSessionTime - 10) / sessionTimeElapsed) * lapCount # 10 seconds to account for standing start
-                        # debug("Estimated number of laps : " + str(estimatedLaps))
-                        return math.ceil(estimatedLaps)
-                    else:
-                        continue
+    expectedLaps = -1
 
-    return -1
+    if sm.static.isTimedRace != 1:
+        expectedLaps = sm.graphics.numberOfLaps + extraLap
+    else:
+        sessionTimeElapsed = raceTotalSessionTime - (sm.graphics.sessionTimeLeft / 1000)
+        lapCount = leaderCurrentLap + leaderLapPosition
+        estimatedLaps = ((raceTotalSessionTime - 10) / sessionTimeElapsed) * lapCount # 10 seconds to account for standing start
+        expectedLaps = math.ceil(estimatedLaps)
+
+    # calculate laps behind leader
+    if leaderCurrentLap == playerCurrentLap:
+        return expectedLaps
+    else:
+        lapsBehind = ((leaderCurrentLap - playerCurrentLap)) - 1
+        if leaderLapPosition > playerLapPosition:
+            lapsBehind += 1
+
+        return expectedLaps - lapsBehind
 
 def onToggleAppSizeButtonClickedListener(*args):
     global minimised, toggleAppSizeButton
