@@ -469,16 +469,21 @@ def initNewSession(session):
 
     debug("Session type changed to " + str(session))
 
+    track = sm.static.track
+    trackConfiguration = ac.getTrackConfiguration(0)
+    if trackConfiguration != -1 and trackConfiguration:
+        track += "-" + trackConfiguration
+
     if currentSessionCalcData == None:
-        currentSessionCalcData = FuelCalcData(sm.static.track, sm.static.carModel, False)
+        currentSessionCalcData = FuelCalcData(track, sm.static.carModel, False)
     else:
         currentSessionCalcData.reset()
 
     if multipleSessionsCalcData == None:
-        multipleSessionsCalcData = FuelCalcData(sm.static.track, sm.static.carModel, False)
+        multipleSessionsCalcData = FuelCalcData(track, sm.static.carModel, False)
 
     if persistedCalcData == None:
-        persistedCalcData = FuelCalcData(sm.static.track, sm.static.carModel, True)
+        persistedCalcData = FuelCalcData(track, sm.static.carModel, True)
         if persistedCalcData.hasData():
             shownCalcData = persistedCalcData
         else:
@@ -558,9 +563,6 @@ def updateFuelEstimate():
             ac.setText(tableCurrentLaps, "%.1f" % (lapsRemaining))
 
             if currentSessionType == 2 and expectedNumberOfLaps != -1:
-                #currentLap = playerData.currentLap()
-                #lapPosition = playerData.lapPosition()
-
                 lapCount = currentLap
                 if raceCrossedStartLine:
                     lapCount = currentLap + lapPosition
