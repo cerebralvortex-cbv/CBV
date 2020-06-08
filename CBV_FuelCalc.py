@@ -90,6 +90,7 @@ raceTotalSessionTime = -1
 raceCrossedStartLine = False
 sessionStartTime = -1
 sessionChangedDetections = 0
+lapInvalid = False
 
 # config
 
@@ -389,7 +390,7 @@ def onMainAppFormRender(deltaT):
 def acUpdate(deltaT):
     global mainAppIsActive, timer
     global averageFuelPerLap, fuelLastLap, completedLaps, fuelAtLapStart, distanceTraveledAtStart, fuelAtStart, lastFuelMeasurement, lastDistanceTraveled, fuelLapsCounted, fuelUsedForCountedLaps, percentOfBestLapTime, bestLapTime, currentSessionType, fuelRemaining
-    global currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, shownCalcData, currentLapReset, wasInPit, raceTotalSessionTime, sessionStartTime, sessionChangedDetections, raceCrossedStartLine
+    global currentSessionCalcData, multipleSessionsCalcData, persistedCalcData, shownCalcData, currentLapReset, wasInPit, raceTotalSessionTime, sessionStartTime, sessionChangedDetections, raceCrossedStartLine, lapInvalid
 
     timer += deltaT
     if timer < 0.025:
@@ -436,10 +437,15 @@ def acUpdate(deltaT):
         if currentSessionType != -1:
             updateFuelEstimate()
 
+        if not lapInvalid and currentLap >=2:
+            if sm.physics.numberOfTyresOut >= 4:
+                lapInvalid = True
+                debug("Lap invalidated")
+
         if currentLap != completedLaps: #when crossed finish line
             # debug("Current Lap %d, completedLaps %d, fuelAtLapStart = %.1f, remaining = %.1f" % (currentLap, completedLaps, fuelAtLapStart, remaining))
 
-            if not currentLapReset and not wasInPit and currentLap >= 2 and fuelAtLapStart > remaining: #if more than 2 laps driven
+            if not currentLapReset and not wasInPit and currentLap >= 2 and fuelAtLapStart > remaining and not lapInvalid: #if more than 2 laps driven
                 lastLapTime = sm.graphics.iLastTime
                 fuelLastLap = (fuelAtLapStart - remaining) / sm.static.aidFuelRate # calculate fuel used last lap
 
@@ -447,12 +453,11 @@ def acUpdate(deltaT):
                 multipleSessionsCalcData.updateCalcData(fuelLastLap, lastLapTime, percentOfBestLapTime)
                 persistedCalcData.updateCalcData(fuelLastLap, lastLapTime, percentOfBestLapTime)
 
-                updateFuelEstimate()
-
             fuelAtLapStart = remaining #reset fuelAtLapStart
             completedLaps = currentLap #set completedLaps
             currentLapReset = False
             wasInPit = False
+            lapInvalid = False
     except Exception:
         debug(repr(traceback.format_exception(exc_type, exc_value, exc_traceback)))
         showMessage("Error: " + traceback.format_exc())
