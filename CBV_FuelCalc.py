@@ -3,7 +3,6 @@ version = "1.0"
 import ac, acsys, platform, os, sys, time, re, configparser, traceback, random, math
 from module.debug import debug
 from module.data import FuelCalcData
-from module.car import CarData
 
 try:
     if platform.architecture()[0] == "64bit":
@@ -437,7 +436,7 @@ def acUpdate(deltaT):
         if currentSessionType != -1:
             updateFuelEstimate()
 
-        if not lapInvalid and currentLap >=2:
+        if not lapInvalid and currentLap >= 1:
             if sm.physics.numberOfTyresOut >= 4:
                 lapInvalid = True
                 debug("Lap invalidated")
@@ -498,7 +497,7 @@ def initNewSession(session):
         shownCalcData = currentSessionCalcData
         ac.setText(tableRowRace, "End of Race")
     else:
-        ac.setText(tableRowRace, "Total Race")
+        ac.setText(tableRowRace, "Total for Race")
 
     updateUIVisibility()
     updateCalcTypeUI()
