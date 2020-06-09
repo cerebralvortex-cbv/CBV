@@ -5,5 +5,10 @@ appName = "CBV_FuelCalc"
 def debug(message):
     global appName
 
-    ac.log(appName + ": " + message)
-    ac.console(appName + ": " + message)
+    fileDebug = False
+    consoleDebug = False
+
+    if fileDebug:
+        ac.log(appName + ": " + message)
+    if consoleDebug:
+        ac.console(appName + ": " + message)
