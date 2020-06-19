@@ -110,6 +110,8 @@ raceLapsSpinner = 0
 raceLaps = 10
 resetButton = 0
 percentOfBestLapTime = 1.03
+percentRacePaceImprovement = 1.02
+pitTime = 0
 
 persistedCalcData = None
 multipleSessionsCalcData = None
@@ -143,8 +145,8 @@ def acMain(ac_version):
         showMessage("Error: " + traceback.format_exc())
 
 def getSettings():
-    global isTimedRace, timedRaceCheckbox, timedRaceMinutesSpinner, timedRaceMinutes, raceLapsSpinner, raceLaps, percentOfBestLapTime
-    global extraLiters, isTimedRace, timedRaceMinutes, raceLaps, percentOfBestLapTime
+    global isTimedRace, timedRaceCheckbox, timedRaceMinutesSpinner, timedRaceMinutes, raceLapsSpinner, raceLaps
+    global extraLiters, isTimedRace, timedRaceMinutes, raceLaps, percentOfBestLapTime, percentRacePaceImprovement, pitTime
 
     try:
         settingsFilePath = os.path.dirname(__file__)+'/settings/settings.ini'
@@ -160,7 +162,9 @@ def getSettings():
         isTimedRace = getSettingsValue(settingsParser, settingsSectionFUELCALC, "isTimedRace", True, True)
         timedRaceMinutes = int(getSettingsValue(settingsParser, settingsSectionFUELCALC, "timedRaceMinutes", 20))
         raceLaps = int(getSettingsValue(settingsParser, settingsSectionFUELCALC, "raceLaps", 10))
-        percentOfBestLapTime = float(getSettingsValue(settingsParser, settingsSectionFUELCALC, "percentOfBestLapTime", 1.07))
+        percentOfBestLapTime = float(getSettingsValue(settingsParser, settingsSectionFUELCALC, "percentOfBestLapTime", 1.03))
+        percentRacePaceImprovement = float(getSettingsValue(settingsParser, settingsSectionFUELCALC, "percentRacePaceImprovement", 1.02))
+        pitTime = int(getSettingsValue(settingsParser, settingsSectionFUELCALC, "pitTime", 0))
 
         with open(settingsFilePath, 'w') as settingsFile:
              settingsParser.write(settingsFile)
@@ -633,7 +637,7 @@ def getLeaderCarId():
     return -1
 
 def getExpectedRaceLaps(leaderCurrentLap, leaderLapPosition, playerCurrentLap, playerLapPosition):
-    global raceTotalSessionTime, raceCrossedStartLine
+    global raceTotalSessionTime, raceCrossedStartLine, percentRacePaceImprovement, pitTime
 
     extraLap = 0
     if sm.static.hasExtraLap:
@@ -646,7 +650,7 @@ def getExpectedRaceLaps(leaderCurrentLap, leaderLapPosition, playerCurrentLap, p
     else:
         sessionTimeElapsed = raceTotalSessionTime - (sm.graphics.sessionTimeLeft / 1000)
         lapCount = leaderCurrentLap + leaderLapPosition
-        estimatedLaps = ((raceTotalSessionTime - 10) / sessionTimeElapsed) * lapCount # 10 seconds to account for standing start
+        estimatedLaps = (((raceTotalSessionTime - pitTime) * percentRacePaceImprovement) / sessionTimeElapsed) * lapCount
         expectedLaps = math.ceil(estimatedLaps)
 
     # calculate laps behind leader
